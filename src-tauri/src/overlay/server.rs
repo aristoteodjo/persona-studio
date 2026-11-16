@@ -4,8 +4,9 @@ use std::sync::Arc;
 
 use axum::body::Body;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Path, State};
-use axum::http::{header, HeaderValue, StatusCode, Uri};
+use axum::extract::{Path, Request, State};
+use axum::http::{header, HeaderMap, HeaderValue, StatusCode, Uri};
+use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::get;
 use axum::Router;
@@ -13,6 +14,7 @@ use tauri::{AppHandle, Emitter};
 use tokio::net::TcpListener;
 use tokio::sync::broadcast::error::RecvError;
 
+use super::guard::{host_allowed, origin_allowed};
 use super::{OverlayHub, BASE_PORT, PORT_ATTEMPTS};
 use crate::profiles;
 
@@ -21,6 +23,26 @@ struct Ctx {
     app: AppHandle,
     hub: Arc<OverlayHub>,
     profiles_root: PathBuf,
+    port: u16,
+    dev_origin: Option<String>,
+}
+
+impl Ctx {
+    fn origin_ok(&self, headers: &HeaderMap) -> bool {
+        let origin = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok());
+        origin_allowed(origin, self.port, self.dev_origin.as_deref())
+    }
+}
+
+async fn check_host(State(ctx): State<Ctx>, req: Request, next: Next) -> Response {
+    let host = req
+        .headers()
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok());
+    if !host_allowed(host, ctx.port) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    next.run(req).await
 }
 
 pub async fn start(app: AppHandle, hub: Arc<OverlayHub>, profiles_root: PathBuf) {
@@ -43,12 +65,28 @@ pub async fn start(app: AppHandle, hub: Arc<OverlayHub>, profiles_root: PathBuf)
     hub.port.store(port, Ordering::Relaxed);
     let _ = app.emit("overlay://info", hub.info());
 
-    let ctx = Ctx { app, hub, profiles_root };
+    let dev_origin = if tauri::is_dev() {
+        app.config()
+            .build
+            .dev_url
+            .as_ref()
+            .map(|u| u.origin().ascii_serialization())
+    } else {
+        None
+    };
+    let ctx = Ctx {
+        app,
+        hub,
+        profiles_root,
+        port,
+        dev_origin,
+    };
     let router = Router::new()
         .route("/overlay", get(overlay_page))
         .route("/ws", get(ws_upgrade))
         .route("/media/{profile}/{file}", get(media))
         .fallback(get(static_asset))
+        .layer(middleware::from_fn_with_state(ctx.clone(), check_host))
         .with_state(ctx);
 
     if let Err(e) = axum::serve(listener, router).await {
@@ -61,7 +99,8 @@ async fn overlay_page(State(ctx): State<Ctx>) -> Response {
     if tauri::is_dev() {
         if let Some(dev) = ctx.app.config().build.dev_url.clone() {
             let base = dev.as_str().trim_end_matches('/');
-            return Redirect::temporary(&format!("{base}/overlay.html?port={port}")).into_response();
+            return Redirect::temporary(&format!("{base}/overlay.html?port={port}"))
+                .into_response();
         }
     }
     serve_asset(&ctx.app, "/overlay.html")
@@ -89,7 +128,11 @@ fn serve_asset(app: &AppHandle, path: &str) -> Response {
     }
 }
 
-async fn media(State(ctx): State<Ctx>, Path((profile, file)): Path<(String, String)>) -> Response {
+async fn media(
+    State(ctx): State<Ctx>,
+    headers: HeaderMap,
+    Path((profile, file)): Path<(String, String)>,
+) -> Response {
     let Some(path) = profiles::media_path(&ctx.profiles_root, &profile, &file) else {
         return StatusCode::NOT_FOUND.into_response();
     };
@@ -102,18 +145,32 @@ async fn media(State(ctx): State<Ctx>, Path((profile, file)): Path<(String, Stri
             let mut res = Response::new(Body::from(bytes));
             let h = res.headers_mut();
             h.insert(header::CONTENT_TYPE, HeaderValue::from_static(mime));
-            // Overlays draw these into WebGL textures, which needs CORS on a cross-origin image.
-            h.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
+            // WebGL textures need CORS; it is granted only to our own pages, never to any site.
+            if let Some(origin) = headers.get(header::ORIGIN) {
+                if ctx.origin_ok(&headers) {
+                    h.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin.clone());
+                }
+            }
+            h.insert(header::VARY, HeaderValue::from_static("Origin"));
             // Media names are content-unique UUIDs, so they never change in place.
-            h.insert(header::CACHE_CONTROL, HeaderValue::from_static("public, max-age=31536000, immutable"));
-            h.insert("x-content-type-options", HeaderValue::from_static("nosniff"));
+            h.insert(
+                header::CACHE_CONTROL,
+                HeaderValue::from_static("private, max-age=31536000, immutable"),
+            );
+            h.insert(
+                "x-content-type-options",
+                HeaderValue::from_static("nosniff"),
+            );
             res
         }
         Err(_) => StatusCode::NOT_FOUND.into_response(),
     }
 }
 
-async fn ws_upgrade(State(ctx): State<Ctx>, ws: WebSocketUpgrade) -> Response {
+async fn ws_upgrade(State(ctx): State<Ctx>, headers: HeaderMap, ws: WebSocketUpgrade) -> Response {
+    if !ctx.origin_ok(&headers) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     ws.on_upgrade(move |socket| client_loop(ctx, socket))
 }
 
@@ -127,7 +184,11 @@ async fn client_loop(ctx: Ctx, mut socket: WebSocket) {
     notify_clients(&ctx);
 
     if let Some(profile) = ctx.hub.current_profile() {
-        if socket.send(Message::Text(profile.as_ref().into())).await.is_err() {
+        if socket
+            .send(Message::Text(profile.as_ref().into()))
+            .await
+            .is_err()
+        {
             ctx.hub.clients.fetch_sub(1, Ordering::Relaxed);
             notify_clients(&ctx);
             return;
