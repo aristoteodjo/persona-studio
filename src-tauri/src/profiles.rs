@@ -5,6 +5,7 @@ use serde_json::Value;
 
 pub const MAX_PROFILE_JSON_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_IMAGE_BYTES: u64 = 25 * 1024 * 1024;
+pub const MAX_MODEL_BYTES: u64 = 150 * 1024 * 1024;
 const PROFILE_FILE: &str = "profile.json";
 
 pub struct ProfilesDir(pub PathBuf);
@@ -32,12 +33,17 @@ pub fn image_ext_mime(ext: &str) -> Option<&'static str> {
         "jpg" => Some("image/jpeg"),
         "webp" => Some("image/webp"),
         "gif" => Some("image/gif"),
+        "vrm" => Some("model/gltf-binary"),
         _ => None,
     }
 }
 
-/// Detects the image format from its magic bytes; the extension of the source file is never trusted.
+/// Detects the media format from its magic bytes; the extension of the source file is never trusted.
+/// A VRM avatar is a binary glTF container.
 pub fn sniff_image_ext(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(b"glTF") {
+        return Some("vrm");
+    }
     if bytes.starts_with(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]) {
         Some("png")
     } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
@@ -120,11 +126,14 @@ pub fn import_image(root: &Path, id: &str, source: &Path) -> Result<String, Stri
     if !meta.is_file() {
         return Err("not a file".into());
     }
-    if meta.len() > MAX_IMAGE_BYTES {
-        return Err("image too large (25 MB max)".into());
+    if meta.len() > MAX_MODEL_BYTES {
+        return Err("file too large".into());
     }
     let bytes = fs::read(source).map_err(|e| e.to_string())?;
-    let ext = sniff_image_ext(&bytes).ok_or("unsupported image format (PNG, JPG, WEBP, GIF)")?;
+    let ext = sniff_image_ext(&bytes).ok_or("unsupported format (PNG, JPG, WEBP, GIF, VRM)")?;
+    if ext != "vrm" && meta.len() > MAX_IMAGE_BYTES {
+        return Err("image too large (25 MB max)".into());
+    }
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let name = format!("{}.{ext}", uuid::Uuid::new_v4());
     fs::write(dir.join(&name), bytes).map_err(|e| e.to_string())?;
@@ -180,6 +189,7 @@ mod tests {
         );
         assert_eq!(sniff_image_ext(&[0xFF, 0xD8, 0xFF, 0xE0]), Some("jpg"));
         assert_eq!(sniff_image_ext(b"RIFF\0\0\0\0WEBPVP8 "), Some("webp"));
+        assert_eq!(sniff_image_ext(b"glTF\x02\0\0\0"), Some("vrm"));
         assert_eq!(sniff_image_ext(b"<svg xmlns"), None);
     }
 

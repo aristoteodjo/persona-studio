@@ -1,4 +1,4 @@
-import { ImageIcon, Plus, ScanFace } from "lucide-react";
+import { Box, ImageIcon, Plus, ScanFace } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -27,6 +27,7 @@ type Props = {
 export const KIND_LABEL: Record<ProfileKind, string> = {
   pngtuber: "2D",
   puppet: "2.5D",
+  vrm: "3D",
 };
 
 const KINDS: {
@@ -46,6 +47,12 @@ const KINDS: {
     title: "2.5D · Une seule image",
     text: "Un portrait de face. Le visage est détecté puis déformé en direct : tête, yeux, bouche, sourcils.",
     icon: ScanFace,
+  },
+  {
+    kind: "vrm",
+    title: "3D · Modèle VRM",
+    text: "Un avatar 3D au format .vrm (VRoid Studio, Booth). Tête, buste, yeux, bouche et cheveux animés.",
+    icon: Box,
   },
 ];
 
@@ -117,7 +124,9 @@ export function ProfileList({ profiles, activeId, onSelect }: Props) {
                     <span className="text-xs text-muted-foreground">
                       {p.kind === "pngtuber"
                         ? `${p.expressions.length} expression${p.expressions.length > 1 ? "s" : ""}`
-                        : "Image animée"}
+                        : p.kind === "puppet"
+                          ? "Image animée"
+                          : "Modèle 3D"}
                     </span>
                   </span>
                   <Badge variant={active ? "default" : "secondary"}>
@@ -169,7 +178,7 @@ export function ProfileList({ profiles, activeId, onSelect }: Props) {
               placeholder="Ex. Kira"
             />
           </div>
-          <fieldset className="grid grid-cols-2 gap-2">
+          <fieldset className="grid grid-cols-3 gap-2">
             <legend className="mb-2 text-sm font-medium">Type d'avatar</legend>
             {KINDS.map((k) => (
               <label

@@ -40,6 +40,15 @@ export const puppetSchema = z.object({
   brows: unit(0, 2, 1),
 });
 
+export const vrmSchema = z.object({
+  model: mediaName,
+  mouth: unit(0, 2, 1),
+  eyes: unit(0, 2, 1),
+  emotion: unit(0, 2, 1),
+  /** How far the arms drop from the T-pose, in radians. */
+  arms: unit(0, 1.5, 1.2),
+});
+
 const base = {
   id: z.string().uuid(),
   name: z.string().min(1).max(60),
@@ -59,6 +68,11 @@ export const profileSchema = z.discriminatedUnion("kind", [
     kind: z.literal("puppet"),
     puppet: puppetSchema,
   }),
+  z.object({
+    ...base,
+    kind: z.literal("vrm"),
+    vrm: vrmSchema,
+  }),
 ]);
 
 export type Motion = z.infer<typeof motionSchema>;
@@ -67,6 +81,8 @@ export type PuppetConfig = z.infer<typeof puppetSchema>;
 export type Profile = z.infer<typeof profileSchema>;
 export type PngtuberProfile = Extract<Profile, { kind: "pngtuber" }>;
 export type PuppetProfile = Extract<Profile, { kind: "puppet" }>;
+export type VrmConfig = z.infer<typeof vrmSchema>;
+export type VrmProfile = Extract<Profile, { kind: "vrm" }>;
 export type ProfileKind = Profile["kind"];
 export type ExpressionSlot = "idle" | "talk" | "blink" | "talkBlink";
 
@@ -92,9 +108,14 @@ export function newProfile(name: string, kind: ProfileKind): Profile {
     updatedAt: now,
     motion: motionSchema.parse({}),
   };
-  return kind === "pngtuber"
-    ? { ...common, kind, expressions: [newExpression("Neutre", 1)] }
-    : { ...common, kind, puppet: puppetSchema.parse({}) };
+  switch (kind) {
+    case "pngtuber":
+      return { ...common, kind, expressions: [newExpression("Neutre", 1)] };
+    case "puppet":
+      return { ...common, kind, puppet: puppetSchema.parse({}) };
+    case "vrm":
+      return { ...common, kind, vrm: vrmSchema.parse({}) };
+  }
 }
 
 /** Every media file a profile references; anything else in its folder can be pruned. */
@@ -102,12 +123,15 @@ export function referencedMedia(profile: Profile): string[] {
   const files =
     profile.kind === "pngtuber"
       ? profile.expressions.flatMap((e) => EXPRESSION_SLOTS.map((s) => e[s]))
-      : [profile.puppet.image];
+      : profile.kind === "puppet"
+        ? [profile.puppet.image]
+        : [profile.vrm.model];
   return [...new Set(files.filter((f): f is string => f !== null))];
 }
 
 export function coverImage(profile: Profile): string | null {
   if (profile.kind === "puppet") return profile.puppet.image;
+  if (profile.kind === "vrm") return null;
   for (const e of profile.expressions) if (e.idle) return e.idle;
   return null;
 }

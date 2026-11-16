@@ -6,6 +6,7 @@ import {
   MicOff,
   ScanFace,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -23,6 +24,9 @@ import {
   setExpression,
   useTracking,
 } from "@/modules/tracking";
+
+const reportRenderError = (message: string) =>
+  toast.error("Affichage de l'avatar impossible", { description: message });
 
 function LevelMeter() {
   const level = useTracking((s) => s.level);
@@ -107,6 +111,7 @@ export function Stage({ profile }: { profile: Profile | null }) {
             profile={profile}
             mediaBase={base}
             getFrame={getLiveFrame}
+            onError={reportRenderError}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">

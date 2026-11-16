@@ -58,6 +58,7 @@ export function SliderField({
 export function useImageImport(
   profileId: string,
   onImported: (name: string) => void,
+  accept: "image" | "model" = "image",
 ) {
   const importImage = useProfiles((s) => s.importImage);
   return useMutation({
@@ -65,7 +66,11 @@ export function useImageImport(
     onSuccess: (name) => {
       if (
         typeof name !== "string" ||
-        !/^[0-9a-f-]{36}\.(png|jpg|webp|gif)$/.test(name)
+        !(
+          accept === "model"
+            ? /^[0-9a-f-]{36}\.vrm$/
+            : /^[0-9a-f-]{36}\.(png|jpg|webp|gif)$/
+        ).test(name)
       ) {
         toast.error("Import inattendu", {
           description: "Le fichier importé n'a pas été reconnu.",

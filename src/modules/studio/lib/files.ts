@@ -7,6 +7,15 @@ const IMAGE_FILTER = {
   extensions: ["png", "jpg", "jpeg", "webp", "gif"],
 };
 
+export async function pickModel(): Promise<string | null> {
+  const picked = await open({
+    multiple: false,
+    directory: false,
+    filters: [{ name: "Modèle VRM", extensions: ["vrm"] }],
+  });
+  return typeof picked === "string" ? picked : null;
+}
+
 export async function pickImage(): Promise<string | null> {
   const picked = await open({
     multiple: false,

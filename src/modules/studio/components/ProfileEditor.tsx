@@ -12,6 +12,7 @@ import { useProfiles } from "@/modules/profiles/store";
 import { SliderField } from "@/modules/studio/components/fields";
 import { PngtuberEditor } from "@/modules/studio/components/PngtuberEditor";
 import { PuppetEditor } from "@/modules/studio/components/PuppetEditor";
+import { VrmEditor } from "@/modules/studio/components/VrmEditor";
 
 const signed = (v: number) => `${v > 0 ? "+" : ""}${Math.round(v * 100)}`;
 
@@ -52,7 +53,7 @@ function MotionEditor({ profile }: { profile: Profile }) {
         max={2}
         onChange={(head) => set({ head })}
       />
-      {profile.kind === "pngtuber" ? (
+      {profile.kind !== "puppet" ? (
         <SliderField
           label="Rebond quand tu parles"
           value={m.bounce}
@@ -124,7 +125,11 @@ export function ProfileEditor({ profile, dropHover, onDeleted }: Props) {
       <Tabs defaultValue="images" className="min-h-0 flex-1 gap-0">
         <TabsList className="mx-4 grid grid-cols-2">
           <TabsTrigger value="images">
-            {profile.kind === "pngtuber" ? "Images" : "Visage"}
+            {profile.kind === "pngtuber"
+              ? "Images"
+              : profile.kind === "puppet"
+                ? "Visage"
+                : "Modèle"}
           </TabsTrigger>
           <TabsTrigger value="motion">Mouvement</TabsTrigger>
         </TabsList>
@@ -132,8 +137,10 @@ export function ProfileEditor({ profile, dropHover, onDeleted }: Props) {
           <TabsContent value="images" className="p-4">
             {profile.kind === "pngtuber" ? (
               <PngtuberEditor profile={profile} dropHover={dropHover} />
-            ) : (
+            ) : profile.kind === "puppet" ? (
               <PuppetEditor profile={profile} dropHover={dropHover} />
+            ) : (
+              <VrmEditor profile={profile} dropHover={dropHover} />
             )}
           </TabsContent>
           <TabsContent value="motion" className="p-4">
