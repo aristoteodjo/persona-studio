@@ -135,7 +135,9 @@ pub fn import_image(root: &Path, id: &str, source: &Path) -> Result<String, Stri
 pub fn prune_media(root: &Path, id: &str, keep: &[String]) -> Result<usize, String> {
     let dir = profile_dir(root, id)?;
     let mut removed = 0;
-    let Ok(entries) = fs::read_dir(&dir) else { return Ok(0) };
+    let Ok(entries) = fs::read_dir(&dir) else {
+        return Ok(0);
+    };
     for entry in entries.flatten() {
         let name = entry.file_name();
         let Some(name) = name.to_str() else { continue };
@@ -172,7 +174,10 @@ mod tests {
 
     #[test]
     fn sniffs_formats_from_bytes() {
-        assert_eq!(sniff_image_ext(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0]), Some("png"));
+        assert_eq!(
+            sniff_image_ext(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0]),
+            Some("png")
+        );
         assert_eq!(sniff_image_ext(&[0xFF, 0xD8, 0xFF, 0xE0]), Some("jpg"));
         assert_eq!(sniff_image_ext(b"RIFF\0\0\0\0WEBPVP8 "), Some("webp"));
         assert_eq!(sniff_image_ext(b"<svg xmlns"), None);

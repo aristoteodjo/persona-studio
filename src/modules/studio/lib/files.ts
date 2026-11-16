@@ -16,6 +16,11 @@ export async function pickImage(): Promise<string | null> {
   return typeof picked === "string" ? picked : null;
 }
 
+export async function pickFolder(): Promise<string | null> {
+  const picked = await open({ multiple: false, directory: true });
+  return typeof picked === "string" ? picked : null;
+}
+
 export const DROP_ATTR = "data-drop-target";
 
 const dropTargets = new Map<string, (path: string) => void>();

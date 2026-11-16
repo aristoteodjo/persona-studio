@@ -1,4 +1,7 @@
-import { Plus, Trash2 } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { invoke } from "@tauri-apps/api/core";
+import { FolderInput, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -14,8 +17,10 @@ import {
   newExpression,
   type PngtuberProfile,
 } from "@/modules/profiles/schema";
+import { type PackFolder, packExpressions } from "@/modules/profiles/pack";
 import { useProfiles } from "@/modules/profiles/store";
 import { ImageSlot, useImageImport } from "@/modules/studio/components/fields";
+import { pickFolder } from "@/modules/studio/lib/files";
 
 const SLOTS: { slot: ExpressionSlot; label: string; hint: string }[] = [
   { slot: "idle", label: "Repos", hint: "Bouche fermée, yeux ouverts" },
@@ -77,8 +82,62 @@ type Props = {
   dropHover: string | null;
 };
 
+const isEmpty = (e: Expression) =>
+  !e.idle && !e.talk && !e.blink && !e.talkBlink;
+
 export function PngtuberEditor({ profile, dropHover }: Props) {
   const update = useProfiles((s) => s.update);
+  const importImage = useProfiles((s) => s.importImage);
+
+  const importPack = useMutation({
+    mutationFn: async (dir: string) => {
+      const folders = await invoke<PackFolder[]>("pack_scan", { dir });
+      const found = packExpressions(folders);
+      const expressions: Expression[] = [];
+      for (const [i, pe] of found.entries()) {
+        const e = newExpression(pe.name, null);
+        for (const [slot, path] of Object.entries(pe.slots)) {
+          e[slot as ExpressionSlot] = await importImage(profile.id, path);
+        }
+        expressions.push({ ...e, hotkey: i + 1 });
+      }
+      return expressions;
+    },
+    onSuccess: (expressions) => {
+      if (!Array.isArray(expressions) || expressions.length === 0) {
+        toast.error("Aucune expression trouvée", {
+          description:
+            "Le dossier doit contenir des images nommées par état, par exemple EyesOpenMouthClosed.png ou idle.png.",
+        });
+        return;
+      }
+      update(profile.id, (p) => {
+        if (p.kind !== "pngtuber") return p;
+        // A fresh profile only has one empty expression: the pack replaces it.
+        const kept = p.expressions.filter((e) => !isEmpty(e));
+        const merged = [...kept, ...expressions].slice(0, 9);
+        const used = new Set<number>();
+        return {
+          ...p,
+          expressions: merged.map((e, i) => {
+            const hotkey = e.hotkey && !used.has(e.hotkey) ? e.hotkey : i + 1;
+            used.add(hotkey);
+            return { ...e, hotkey: hotkey <= 9 ? hotkey : null };
+          }),
+        };
+      });
+      toast.success(
+        `${expressions.length} expression${expressions.length > 1 ? "s" : ""} importée${expressions.length > 1 ? "s" : ""}`,
+      );
+    },
+    onError: (e) =>
+      toast.error("Import du dossier impossible", { description: String(e) }),
+  });
+
+  const pickPack = async () => {
+    const dir = await pickFolder();
+    if (dir) importPack.mutate(dir);
+  };
 
   const patchExpression = (id: string, patch: Partial<Expression>) =>
     update(profile.id, (p) =>
@@ -204,6 +263,16 @@ export function PngtuberEditor({ profile, dropHover }: Props) {
         disabled={profile.expressions.length >= 9}
       >
         <Plus /> Ajouter une expression
+      </Button>
+      <Button
+        variant="ghost"
+        onClick={pickPack}
+        disabled={importPack.isPending}
+      >
+        <FolderInput />
+        {importPack.isPending
+          ? "Import en cours…"
+          : "Importer un dossier de PNGTuber"}
       </Button>
     </div>
   );

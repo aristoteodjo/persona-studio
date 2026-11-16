@@ -1,4 +1,5 @@
 mod overlay;
+mod pack;
 mod profiles;
 
 use std::path::PathBuf;
@@ -37,6 +38,13 @@ async fn profile_import_image(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn pack_scan(dir: String) -> Result<Vec<pack::PackFolder>, String> {
+    tauri::async_runtime::spawn_blocking(move || pack::scan(&PathBuf::from(dir)))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -88,6 +96,7 @@ pub fn run() {
             profile_delete,
             profile_import_image,
             profile_prune_media,
+            pack_scan,
             overlay_info,
             overlay_set_profile,
             overlay_push_frame,
