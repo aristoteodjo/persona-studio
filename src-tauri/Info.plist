@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSCameraUsageDescription</key>
+  <string>Persona Studio utilise la caméra pour suivre les mouvements de ton visage et animer ton avatar.</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Persona Studio utilise le micro pour animer la bouche de ton avatar quand tu parles.</string>
+</dict>
+</plist>

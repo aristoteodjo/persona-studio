@@ -1,0 +1,100 @@
+import { useEffect, useState } from "react";
+import { pushProfile, useOverlayInfo } from "@/modules/overlay-link";
+import { useProfiles } from "@/modules/profiles/store";
+import { useSettings } from "@/modules/settings/store";
+import { AboutModal } from "@/modules/studio/components/AboutModal";
+import { ProfileEditor } from "@/modules/studio/components/ProfileEditor";
+import { ProfileList } from "@/modules/studio/components/ProfileList";
+import { SettingsModal } from "@/modules/studio/components/SettingsModal";
+import { Stage } from "@/modules/studio/components/Stage";
+import { TopBar } from "@/modules/studio/components/TopBar";
+import { useExpressionHotkeys } from "@/modules/studio/lib/useExpressionHotkeys";
+import { useFileDrop } from "@/modules/studio/lib/files";
+import { setExpression, useTrackingSync } from "@/modules/tracking";
+
+export function App() {
+  const profiles = useProfiles((s) => s.profiles);
+  const loaded = useProfiles((s) => s.loaded);
+  const loadError = useProfiles((s) => s.loadError);
+  const saveError = useProfiles((s) => s.saveError);
+  const settingsLoaded = useSettings((s) => s.loaded);
+  const activeId = useSettings((s) => s.settings.activeProfileId);
+  const globalHotkeys = useSettings((s) => s.settings.globalHotkeys);
+  const setSettings = useSettings((s) => s.set);
+  const overlay = useOverlayInfo();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const dropHover = useFileDrop();
+
+  useEffect(() => {
+    void useSettings.getState().load();
+    void useProfiles.getState().load();
+  }, []);
+
+  useTrackingSync();
+
+  const active = profiles.find((p) => p.id === activeId) ?? profiles[0] ?? null;
+  useExpressionHotkeys(active, globalHotkeys);
+
+  // The overlay always shows the active profile; re-sent when the server restarts or a client connects.
+  useEffect(() => {
+    if (!loaded || !overlay.port) return;
+    pushProfile(active);
+  }, [active, loaded, overlay.port]);
+
+  const select = (id: string) => {
+    setSettings({ activeProfileId: id });
+    setExpression(null);
+  };
+
+  if (!loaded || !settingsLoaded) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+        Chargement du studio…
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <a
+        href="#stage"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-24 focus:z-50 focus:rounded focus:bg-primary focus:px-2 focus:py-1 focus:text-primary-foreground"
+      >
+        Aller à l'aperçu
+      </a>
+      <TopBar
+        onSettings={() => setSettingsOpen(true)}
+        onAbout={() => setAboutOpen(true)}
+      />
+      {loadError || saveError ? (
+        <p
+          role="alert"
+          className="bg-destructive/15 px-4 py-2 text-xs text-destructive"
+        >
+          {loadError
+            ? `Lecture des personas impossible : ${loadError}`
+            : `Enregistrement impossible : ${saveError}`}
+        </p>
+      ) : null}
+      <main id="stage" className="flex min-h-0 flex-1">
+        <ProfileList
+          profiles={profiles}
+          activeId={active?.id ?? null}
+          onSelect={select}
+        />
+        <Stage profile={active} />
+        {active ? (
+          <ProfileEditor
+            key={active.id}
+            profile={active}
+            dropHover={dropHover}
+            onDeleted={() => setSettings({ activeProfileId: null })}
+          />
+        ) : null}
+      </main>
+      <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <AboutModal open={aboutOpen} onOpenChange={setAboutOpen} />
+    </div>
+  );
+}
