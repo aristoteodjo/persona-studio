@@ -15,12 +15,32 @@ pub fn load_or_create_key(path: &std::path::Path) -> std::io::Result<String> {
     if let Ok(k) = std::fs::read_to_string(path) {
         let k = k.trim();
         if k.len() == 32 && k.chars().all(|c| c.is_ascii_hexdigit()) {
+            restrict(path)?;
             return Ok(k.to_string());
         }
     }
     let key = uuid::Uuid::new_v4().simple().to_string();
-    std::fs::write(path, &key)?;
+    let tmp = path.with_extension("tmp");
+    let _ = std::fs::remove_file(&tmp);
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    std::io::Write::write_all(&mut options.open(&tmp)?, key.as_bytes())?;
+    std::fs::rename(&tmp, path)?;
     Ok(key)
+}
+
+/// The key grants access to the microphone stream: owner-only permissions.
+fn restrict(path: &std::path::Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+    Ok(())
 }
 
 pub const BASE_PORT: u16 = 39540;
@@ -169,6 +189,21 @@ mod tests {
         hub.unregister(b);
         assert!(hub.send_to(b, "late".into()).is_err());
         assert_eq!(hub.info().clients, 1);
+    }
+
+    #[test]
+    fn key_file_is_stable_and_private() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("overlay.key");
+        let a = load_or_create_key(&path).unwrap();
+        assert_eq!(a.len(), 32);
+        assert_eq!(load_or_create_key(&path).unwrap(), a);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
     }
 
     #[test]
