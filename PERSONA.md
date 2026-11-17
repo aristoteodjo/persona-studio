@@ -46,7 +46,7 @@ Persona (profil), Expression, État (repos, parle, cligne, parle + cligne), Pupp
 ## Commandes
 
 - Assets MediaPipe (non versionnés) : `pnpm setup:assets` (copie le wasm, télécharge `face_landmarker.task`).
-- Dev : projet Portly `persona-studio`, serveur `app` = `pnpm tauri dev` (Vite sur 1436).
+- Dev : projet Portly `persona-studio`, serveur `app` = `pnpm tauri dev` (Vite sur 1436). Le shell de Portly ne charge ni nvm ni asdf : la commande du serveur préfixe `PATH` (nvm, `~/.asdf/shims`, `~/.cargo/bin`), et `portly temp` reçoit `--env "PATH=$PATH"`.
 - **Caméra et micro** : en `tauri dev` lancé par Portly, macOS attribue la demande à Portly, qui n'a pas de `NSCameraUsageDescription`, et refuse en silence. Pour tester la caméra, construire le bundle : `pnpm tauri build --debug --bundles app` puis `open "src-tauri/target/debug/bundle/macos/Persona Studio.app"`.
 - OBS : pour la voix modifiée, cocher « Contrôler l'audio via OBS » sur la source Navigateur.
 - OBS : source Navigateur, URL `http://127.0.0.1:39540/overlay`, 1920x1080 (`?debug=1` affiche l'état de connexion).
