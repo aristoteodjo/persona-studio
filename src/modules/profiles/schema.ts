@@ -129,6 +129,7 @@ export const CREATOR_HAIR = [
 ] as const;
 export const CREATOR_EYES = ["round", "sharp", "sleepy"] as const;
 export const CREATOR_OUTFITS = ["hoodie", "tee", "sailor", "jacket"] as const;
+export const CREATOR_BOTTOMS = ["pants", "shorts", "skirt"] as const;
 export const CREATOR_ACCESSORIES = [
   "catEars",
   "glasses",
@@ -160,6 +161,15 @@ export const creatorSchema = z.object({
       accent: hexColor.catch("#f4efe6").default("#f4efe6"),
     })
     .default({ style: "hoodie", color: "#e86a33", accent: "#f4efe6" }),
+  bottom: z
+    .object({
+      style: z.enum(CREATOR_BOTTOMS).catch("pants").default("pants"),
+      color: hexColor.catch("#2b2f45").default("#2b2f45"),
+    })
+    .default({ style: "pants", color: "#2b2f45" }),
+  shoes: hexColor.catch("#f4efe6").default("#f4efe6"),
+  /** Shoulder and hip width. */
+  bodyWidth: unit(0.8, 1.2, 1),
   accessories: z
     .array(z.enum(CREATOR_ACCESSORIES))
     .max(CREATOR_ACCESSORIES.length)

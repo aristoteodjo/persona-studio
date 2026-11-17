@@ -67,4 +67,26 @@ describe("creator spec", () => {
     expect(shade("#808080", 0.5)).toBe("#404040");
     expect(shade("#ffffff", 2)).toBe("#ffffff");
   });
+
+  it("dresses the legs according to the bottom style", () => {
+    const legColor = (style: "pants" | "shorts" | "skirt") =>
+      buildCreatorSpec({ ...base, bottom: { style, color: "#123456" } }).parts;
+    expect(legColor("pants").find((p) => p.id === "lower.legL")?.color).toBe(
+      "#123456",
+    );
+    expect(legColor("skirt").find((p) => p.id === "lower.legL")?.color).toBe(
+      base.skin,
+    );
+    expect(legColor("skirt").some((p) => p.id === "lower.skirt")).toBe(true);
+    expect(legColor("shorts").some((p) => p.id === "lower.shortL")).toBe(true);
+  });
+
+  it("widens the body without touching the head", () => {
+    const narrow = buildCreatorSpec({ ...base, bodyWidth: 0.8 }).parts;
+    const wide = buildCreatorSpec({ ...base, bodyWidth: 1.2 }).parts;
+    const x = (parts: typeof wide, id: string) =>
+      parts.find((p) => p.id === id)?.position[0] ?? 0;
+    expect(x(wide, "body.handL")).toBeGreaterThan(x(narrow, "body.handL"));
+    expect(x(wide, "eyeL.white")).toBe(x(narrow, "eyeL.white"));
+  });
 });

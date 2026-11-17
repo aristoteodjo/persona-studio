@@ -434,6 +434,65 @@ function outfitParts(cfg: CreatorConfig): Part[] {
   return parts;
 }
 
+function lowerParts(cfg: CreatorConfig): Part[] {
+  const { style, color } = cfg.bottom;
+  const dark = shade(color, 0.85);
+  const parts: Part[] = [
+    {
+      id: "lower.hips",
+      group: "body",
+      shape: "capsule",
+      dims: [0.12, 0.05],
+      position: [0, 0.79, 0],
+      scale: [1.12, 1, 0.75],
+      color,
+    },
+  ];
+  for (const x of [-1, 1]) {
+    const side = x > 0 ? "L" : "R";
+    parts.push(
+      {
+        id: `lower.leg${side}`,
+        group: "body",
+        shape: "capsule",
+        dims: [0.052, 0.6],
+        position: [x * 0.07, 0.4, 0],
+        color: style === "pants" ? color : cfg.skin,
+      },
+      {
+        id: `lower.shoe${side}`,
+        group: "body",
+        shape: "box",
+        dims: [0.08, 0.06, 0.15],
+        position: [x * 0.07, 0.03, 0.025],
+        color: cfg.shoes,
+      },
+    );
+    if (style === "shorts") {
+      parts.push({
+        id: `lower.short${side}`,
+        group: "body",
+        shape: "capsule",
+        dims: [0.062, 0.14],
+        position: [x * 0.07, 0.66, 0],
+        color: dark,
+      });
+    }
+  }
+  if (style === "skirt") {
+    parts.push({
+      id: "lower.skirt",
+      group: "body",
+      shape: "cylinder",
+      dims: [0.14, 0.23, 0.26],
+      position: [0, 0.68, 0],
+      scale: [1, 1, 0.8],
+      color,
+    });
+  }
+  return parts;
+}
+
 function accessoryParts(cfg: CreatorConfig): Part[] {
   const c = cfg.accessoryColor;
   const parts: Part[] = [];
@@ -542,17 +601,8 @@ export function buildCreatorSpec(cfg: CreatorConfig): CreatorSpec {
       group: "head",
       shape: "sphere",
       dims: [HEAD_R],
-      position: [0, 0.12, 0],
-      scale: [1, 1.04, 0.97],
-      color: skin,
-    },
-    {
-      id: "head.jaw",
-      group: "head",
-      shape: "sphere",
-      dims: [0.105],
-      position: [0, 0.055, 0],
-      scale: [0.95, 0.85, 1],
+      position: [0, 0.112, 0],
+      scale: [1, 1.08, 0.97],
       color: skin,
     },
     {
@@ -621,7 +671,25 @@ export function buildCreatorSpec(cfg: CreatorConfig): CreatorSpec {
       });
     }
   }
-  parts.push(...hairParts(cfg), ...outfitParts(cfg), ...accessoryParts(cfg));
+  parts.push(
+    ...hairParts(cfg),
+    ...outfitParts(cfg),
+    ...lowerParts(cfg),
+    ...accessoryParts(cfg),
+  );
+  // Body width scales across X only, so shoulders and hips widen without stretching the head.
+  for (const p of parts) {
+    if (p.group !== "body" || p.id === "body.neck") continue;
+    p.position = [p.position[0] * cfg.bodyWidth, p.position[1], p.position[2]];
+    const sc = p.scale ?? [1, 1, 1];
+    if (
+      p.id === "body.torso" ||
+      p.id === "lower.hips" ||
+      p.id === "lower.skirt"
+    ) {
+      p.scale = [sc[0] * cfg.bodyWidth, sc[1], sc[2]];
+    }
+  }
   const s = cfg.headScale;
   return {
     groups,

@@ -32,9 +32,27 @@ import { LIGHT_RIGS } from "@/modules/avatar/lighting";
 import type { CreatorProfile } from "@/modules/profiles/schema";
 import type { RigFrame } from "@/modules/rig/rig";
 
+export type Framing = "face" | "bust" | "body";
+
+/** Free camera used by the Atelier; read every frame, never through React. */
+export type OrbitView = {
+  yaw: number;
+  zoom: number;
+  framing: Framing;
+  spin: boolean;
+};
+
+/** Height framed and point looked at, per framing. */
+const FRAMINGS: Record<Framing, { height: number; y: number }> = {
+  face: { height: 0.6, y: 1.43 },
+  bust: { height: 0.95, y: 1.22 },
+  body: { height: 1.85, y: 0.86 },
+};
+
 type Props = {
   profile: CreatorProfile;
   getFrame: () => RigFrame;
+  view?: { current: OrbitView };
 };
 
 const FOV = 25;
@@ -123,7 +141,7 @@ function build(profile: CreatorProfile, ramp: DataTexture): Built {
   };
 }
 
-export default function CreatorView({ profile, getFrame }: Props) {
+export default function CreatorView({ profile, getFrame, view }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const profileRef = useRef(profile);
   profileRef.current = profile;
@@ -204,15 +222,30 @@ export default function CreatorView({ profile, getFrame }: Props) {
       relight();
       const { groups } = rebuild();
       const { motion, creator } = profileRef.current;
-      const visible = FRAME_HEIGHT / motion.scale;
-      const dist = visible / 2 / Math.tan((FOV * Math.PI) / 360);
-      const target = new Vector3(
-        focus.x - motion.offsetX * visible * camera.aspect * 0.5,
-        focus.y - 0.2 + motion.offsetY * visible * 0.5,
-        focus.z,
-      );
-      camera.position.set(target.x, target.y, target.z + dist);
-      camera.lookAt(target);
+      const orbit = view?.current;
+      if (orbit) {
+        const f = FRAMINGS[orbit.framing];
+        const visible = f.height / orbit.zoom;
+        const dist = visible / 2 / Math.tan((FOV * Math.PI) / 360);
+        if (orbit.spin) orbit.yaw += 0.006;
+        const y = orbit.framing === "face" ? focus.y : f.y;
+        camera.position.set(
+          Math.sin(orbit.yaw) * dist,
+          y,
+          Math.cos(orbit.yaw) * dist,
+        );
+        camera.lookAt(0, y, 0);
+      } else {
+        const visible = FRAME_HEIGHT / motion.scale;
+        const dist = visible / 2 / Math.tan((FOV * Math.PI) / 360);
+        const target = new Vector3(
+          focus.x - motion.offsetX * visible * camera.aspect * 0.5,
+          focus.y - 0.2 + motion.offsetY * visible * 0.5,
+          focus.z,
+        );
+        camera.position.set(target.x, target.y, target.z + dist);
+        camera.lookAt(target);
+      }
 
       const pose = creatorPose(getFrame(), creator, motion, now);
       groups.head.rotation.set(...pose.head);
@@ -234,7 +267,7 @@ export default function CreatorView({ profile, getFrame }: Props) {
       ramp.dispose();
       renderer.dispose();
     };
-  }, [getFrame]);
+  }, [getFrame, view]);
 
   return <canvas ref={canvasRef} className="absolute inset-0 size-full" />;
 }
