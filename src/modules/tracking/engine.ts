@@ -311,16 +311,21 @@ class Engine {
       this.arms = null;
       return;
     }
-    const sides = armsFromPose(world, mirror, {
-      left: this.arms?.left != null,
-      right: this.arms?.right != null,
-    });
+    const hands = models.hands.detectForVideo(video, now);
+    const handWrists = hands.landmarks.flatMap((hand) =>
+      hand[0] ? [hand[0]] : [],
+    );
+    const sides = armsFromPose(
+      world,
+      mirror,
+      { left: this.arms?.left != null, right: this.arms?.right != null },
+      { image, hands: handWrists },
+    );
     const wrists = avatarWrists(image, mirror);
     const curls: Record<"left" | "right", ReturnType<typeof fingerCurls>> = {
       left: null,
       right: null,
     };
-    const hands = models.hands.detectForVideo(video, now);
     hands.landmarks.forEach((hand, i) => {
       const w = hand[0];
       const handWorld = hands.worldLandmarks[i];

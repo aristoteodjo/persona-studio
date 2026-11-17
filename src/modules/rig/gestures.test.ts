@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   armRotations,
   armsFromPose,
+  avoidTorso,
   fingerCurls,
   isArmPose,
   type Landmark,
   quatForMetaVersion,
   quatFromUnitVectors,
   rotateInverse,
+  sidesSwapped,
   smoothArms,
 } from "@/modules/rig/gestures";
 
@@ -51,6 +53,100 @@ describe("arms from pose", () => {
   it("ignores arms whose wrist is not visible", () => {
     const hidden = pose({ 15: lm(0.2, 0.2, 0, 0.1) });
     expect(armsFromPose(hidden, false).left).toBeNull();
+  });
+});
+
+/** Image landmarks (normalized, y down) of a subject facing the camera, hands at chest height. */
+function imagePose(overrides: Record<number, Landmark> = {}): Landmark[] {
+  const p: Landmark[] = Array.from({ length: 33 }, () => lm(0.5, 0.5));
+  p[11] = lm(0.65, 0.5);
+  p[12] = lm(0.35, 0.5);
+  p[15] = lm(0.7, 0.8);
+  p[16] = lm(0.3, 0.8);
+  for (const [k, v] of Object.entries(overrides)) p[Number(k)] = v;
+  return p;
+}
+
+describe("arm evidence", () => {
+  const bothHands = [
+    { x: 0.7, y: 0.8 },
+    { x: 0.3, y: 0.8 },
+  ];
+
+  it("trusts shoulder geometry over swapped pose labels", () => {
+    const raised = pose({ 14: lm(-0.5, -0.4), 16: lm(-0.5, -0.8) });
+    const good = armsFromPose(raised, true, undefined, {
+      image: imagePose(),
+      hands: bothHands,
+    });
+    // Same body with every left/right label swapped, world and image alike.
+    const swap = (p: Landmark[]) => {
+      const q = [...p];
+      for (const [a, b] of [
+        [11, 12],
+        [13, 14],
+        [15, 16],
+      ] as const) {
+        q[a] = p[b] as Landmark;
+        q[b] = p[a] as Landmark;
+      }
+      return q;
+    };
+    const image = swap(imagePose());
+    expect(sidesSwapped(image)).toBe(true);
+    const flipped = armsFromPose(swap(raised), true, undefined, {
+      image,
+      hands: bothHands,
+    });
+    expect(flipped.left?.upper).toEqual(good.left?.upper);
+    expect(flipped.right?.upper).toEqual(good.right?.upper);
+  });
+
+  it("ignores an arm whose wrist is below the frame", () => {
+    const image = imagePose({ 15: lm(0.7, 1.1) });
+    const arms = armsFromPose(pose(), false, undefined, {
+      image,
+      hands: bothHands,
+    });
+    expect(arms.left).toBeNull();
+    expect(arms.right).not.toBeNull();
+  });
+
+  it("needs a detected hand to start tracking, not to keep it", () => {
+    const image = imagePose();
+    const oneHand = [{ x: 0.3, y: 0.8 }];
+    const start = armsFromPose(pose(), false, undefined, {
+      image,
+      hands: oneHand,
+    });
+    expect(start.left).toBeNull();
+    expect(start.right).not.toBeNull();
+    const kept = armsFromPose(
+      pose(),
+      false,
+      { left: true, right: true },
+      { image, hands: [] },
+    );
+    expect(kept.left).not.toBeNull();
+  });
+});
+
+describe("body collision", () => {
+  it("leaves a hanging arm alone", () => {
+    const r = avoidTorso([0, -1, 0], [0, -1, 0], "left");
+    expect(r.upper).toEqual([0, -1, 0]);
+    expect(r.lower).toEqual([0, -1, 0]);
+  });
+
+  it("brings a hand reaching across the chest out in front of it", () => {
+    const r = avoidTorso([0, -1, 0], [-0.4, 0.9, 0], "left");
+    const elbow = [0.17, -0.27, 0];
+    const wrist = elbow.map((v, i) => v + (r.lower[i] ?? 0) * 0.25);
+    expect(wrist[2]).toBeGreaterThanOrEqual(0.12 - 1e-9);
+    expect(Math.hypot(...r.lower)).toBeCloseTo(1);
+    // The hand still heads inward and up.
+    expect(r.lower[0]).toBeLessThan(0);
+    expect(r.lower[1]).toBeGreaterThan(0);
   });
 });
 

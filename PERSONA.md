@@ -82,5 +82,7 @@ Persona (profil), Expression, État (repos, parle, cligne, parle + cligne), Pupp
 - `tauri build` échoue si le bundle est en cours d'exécution : quitter l'app avant de reconstruire.
 - Mouvement de tête : filtre One Euro (`rig.ts`, `HeadFilter`) sur yaw/pitch/roll/x/y ; le lissage exponentiel ne traite plus que le visage. Un test verrouille qu'une tête immobile reste immobile.
 - Gestes : la profondeur MediaPipe est bruitée (amortie x0,5), hystérésis de visibilité 0,75/0,45, zone morte de 2,5 degrés ; ne pas retirer ces garde-fous sans retester à la webcam.
+- Gestes : le côté gauche/droite vient de la position des épaules dans l'image (Pose inverse parfois ses étiquettes) ; un bras ne démarre que si son poignet est dans le cadre et qu'une main est détectée à côté (Pose invente des bras hors champ) ; `avoidTorso` garde coude et main devant le torse.
+- CSP Tauri : `connect-src` doit garder `blob:`. Dans WKWebView, GLTFLoader charge les textures du .vrm par `fetch(blob:)` ; sans `blob:` toutes les textures sautent en silence (modèle blanc) dans le bundle seulement, pas en `tauri dev`.
 - Le premier `tauri build` après une modification renvoie parfois 1 alors que le second passe : relancer avant de conclure à une erreur.
 - Le port Vite 1420 est déjà pris dans Portly par un autre projet ; on utilise 1436/1437.

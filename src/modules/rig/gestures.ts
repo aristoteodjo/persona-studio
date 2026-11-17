@@ -85,21 +85,85 @@ function toAvatar(p: Landmark, mirror: boolean): Vec3 {
   return [mirror ? -p.x : p.x, -p.y, -p.z * DEPTH_SCALE];
 }
 
+/** A detected hand must sit this close (image units) to a wrist to confirm it. */
+const HAND_PAIR_DISTANCE = 0.15;
+/** Pose guesses arms below the frame with high confidence; a wrist must be on screen. */
+const FRAME_MARGIN = 0.02;
+
+type Point2 = { x: number; y: number };
+
+const inFrame = (p: Landmark | undefined) =>
+  !!p &&
+  p.x > FRAME_MARGIN &&
+  p.x < 1 - FRAME_MARGIN &&
+  p.y > FRAME_MARGIN &&
+  p.y < 1 - FRAME_MARGIN;
+
+const near = (a: Point2, b: Point2) =>
+  Math.hypot(a.x - b.x, a.y - b.y) < HAND_PAIR_DISTANCE;
+
+/**
+ * Pose sometimes labels the body sides backwards. Someone facing the camera
+ * always has their right shoulder on the image left, so geometry decides.
+ */
+export function sidesSwapped(image: readonly Landmark[] | undefined): boolean {
+  const l = image?.[POSE.leftShoulder];
+  const r = image?.[POSE.rightShoulder];
+  return !!l && !!r && l.x < r.x;
+}
+
+type Joints = { shoulder: number; elbow: number; wrist: number };
+const SUBJECT_LEFT: Joints = {
+  shoulder: POSE.leftShoulder,
+  elbow: POSE.leftElbow,
+  wrist: POSE.leftWrist,
+};
+const SUBJECT_RIGHT: Joints = {
+  shoulder: POSE.rightShoulder,
+  elbow: POSE.rightElbow,
+  wrist: POSE.rightWrist,
+};
+
+/** Joint indices of the subject's real left and right arms. */
+function subjectJoints(image: readonly Landmark[] | undefined) {
+  return sidesSwapped(image)
+    ? { left: SUBJECT_RIGHT, right: SUBJECT_LEFT }
+    : { left: SUBJECT_LEFT, right: SUBJECT_RIGHT };
+}
+
+export type ArmEvidence = {
+  /** Image-space landmarks of the same pose, for side and framing checks. */
+  image?: readonly Landmark[];
+  /** Image-space wrists of the hands the hand model found. */
+  hands?: readonly Point2[];
+};
+
 function side(
   lm: readonly Landmark[],
-  shoulder: number,
-  elbow: number,
-  wrist: number,
+  j: Joints,
   mirror: boolean,
   tracked: boolean,
+  evidence: ArmEvidence,
 ): Omit<ArmSide, "curl"> | null {
-  const s = lm[shoulder];
-  const e = lm[elbow];
-  const w = lm[wrist];
+  const s = lm[j.shoulder];
+  const e = lm[j.elbow];
+  const w = lm[j.wrist];
   if (!s || !e || !w) return null;
   const min = tracked ? STAY_VISIBILITY : ENTER_VISIBILITY;
   if ((e.visibility ?? 0) < min || (w.visibility ?? 0) < min) {
     return null;
+  }
+  if (evidence.image) {
+    const wrist = evidence.image[j.wrist];
+    if (!inFrame(wrist)) return null;
+    // Starting needs a real hand there; a tracked arm survives missed hand frames.
+    if (
+      !tracked &&
+      evidence.hands &&
+      !evidence.hands.some((h) => wrist && near(h, wrist))
+    ) {
+      return null;
+    }
   }
   const upper = normalize(sub(toAvatar(e, mirror), toAvatar(s, mirror)));
   const lower = normalize(sub(toAvatar(w, mirror), toAvatar(e, mirror)));
@@ -114,24 +178,23 @@ export function armsFromPose(
   world: readonly Landmark[],
   mirror: boolean,
   tracked: { left: boolean; right: boolean } = { left: false, right: false },
+  evidence: ArmEvidence = {},
 ): { left: Omit<ArmSide, "curl"> | null; right: Omit<ArmSide, "curl"> | null } {
+  const joints = subjectJoints(evidence.image);
   // With a mirrored view the subject's right arm drives the avatar's left one.
-  const rightIsLeft = mirror;
   const subjectRight = side(
     world,
-    POSE.rightShoulder,
-    POSE.rightElbow,
-    POSE.rightWrist,
+    joints.right,
     mirror,
-    rightIsLeft ? tracked.left : tracked.right,
+    mirror ? tracked.left : tracked.right,
+    evidence,
   );
   const subjectLeft = side(
     world,
-    POSE.leftShoulder,
-    POSE.leftElbow,
-    POSE.leftWrist,
+    joints.left,
     mirror,
-    rightIsLeft ? tracked.right : tracked.left,
+    mirror ? tracked.right : tracked.left,
+    evidence,
   );
   return mirror
     ? { left: subjectRight, right: subjectLeft }
@@ -143,8 +206,9 @@ export function avatarWrists(
   image: readonly Landmark[],
   mirror: boolean,
 ): { left: Landmark | null; right: Landmark | null } {
-  const subjectRight = image[POSE.rightWrist] ?? null;
-  const subjectLeft = image[POSE.leftWrist] ?? null;
+  const joints = subjectJoints(image);
+  const subjectRight = image[joints.right.wrist] ?? null;
+  const subjectLeft = image[joints.left.wrist] ?? null;
   return mirror
     ? { left: subjectRight, right: subjectLeft }
     : { left: subjectLeft, right: subjectRight };
@@ -203,17 +267,81 @@ function limitInward(v: Vec3, which: "left" | "right", limit: number): Vec3 {
     : [x, (v[1] / yz) * rest, (v[2] / yz) * rest];
 }
 
+/**
+ * Rough humanoid proportions in meters, avatar space, origin between the
+ * shoulders: enough to keep elbows and hands in front of the chest.
+ */
+const BODY = {
+  shoulderX: 0.17,
+  upper: 0.27,
+  fore: 0.25,
+  torsoHalfWidth: 0.15,
+  torsoTop: 0.05,
+  torsoBottom: -0.6,
+  torsoFront: 0.12,
+};
+
+const insideTorso = (p: Vec3) =>
+  Math.abs(p[0]) < BODY.torsoHalfWidth &&
+  p[1] < BODY.torsoTop &&
+  p[1] > BODY.torsoBottom &&
+  p[2] < BODY.torsoFront;
+
+/** Tilts a unit direction toward the camera until its Z reaches `minZ`, keeping its X/Y heading. */
+function withMinZ(v: Vec3, minZ: number): Vec3 {
+  const z = Math.min(Math.max(minZ, -1), 1);
+  if (v[2] >= z) return v;
+  const rest = Math.sqrt(1 - z * z);
+  const xy = Math.hypot(v[0], v[1]);
+  return xy < 1e-3
+    ? [0, -rest, z]
+    : [(v[0] / xy) * rest, (v[1] / xy) * rest, z];
+}
+
+const along = (from: Vec3, dir: Vec3, length: number): Vec3 => [
+  from[0] + dir[0] * length,
+  from[1] + dir[1] * length,
+  from[2] + dir[2] * length,
+];
+
+/** Monocular depth puts hands inside the chest; push elbow and hand out in front of it. */
+export function avoidTorso(
+  upper: Vec3,
+  lower: Vec3,
+  which: "left" | "right",
+): { upper: Vec3; lower: Vec3 } {
+  const shoulder: Vec3 = [
+    which === "left" ? BODY.shoulderX : -BODY.shoulderX,
+    0,
+    0,
+  ];
+  let u = upper;
+  if (insideTorso(along(shoulder, u, BODY.upper))) {
+    u = withMinZ(u, BODY.torsoFront / BODY.upper);
+  }
+  const elbow = along(shoulder, u, BODY.upper);
+  let l = lower;
+  if (
+    insideTorso(along(elbow, l, BODY.fore)) ||
+    insideTorso(along(elbow, l, BODY.fore / 2))
+  ) {
+    l = withMinZ(l, (BODY.torsoFront - elbow[2]) / BODY.fore);
+  }
+  return { upper: u, lower: l };
+}
+
 export function armRotations(
   arm: ArmSide,
   which: "left" | "right",
 ): ArmRotations {
   const rest: Vec3 = which === "left" ? [1, 0, 0] : [-1, 0, 0];
-  const upper = quatFromUnitVectors(
-    rest,
+  const safe = avoidTorso(
     limitInward(arm.upper, which, MAX_UPPER_INWARD),
+    limitInward(arm.lower, which, MAX_LOWER_INWARD),
+    which,
   );
-  const lowerDir = limitInward(arm.lower, which, MAX_LOWER_INWARD);
-  const local = normalize(rotateInverse(upper, lowerDir)) ?? rest;
+  const upper = quatFromUnitVectors(rest, safe.upper);
+  const local = normalize(rotateInverse(upper, safe.lower)) ?? rest;
   return { upper, lower: quatFromUnitVectors(rest, local) };
 }
 
