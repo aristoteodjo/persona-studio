@@ -1,17 +1,24 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
+import { setOverlayKey } from "@/modules/overlay-link/key";
 import { encodeFrame, encodeProfile } from "@/modules/overlay-link/protocol";
 import type { Profile } from "@/modules/profiles/schema";
 import type { RigFrame } from "@/modules/rig/rig";
 
-export type OverlayInfo = { port: number; url: string; clients: number };
+export type OverlayInfo = {
+  port: number;
+  url: string;
+  clients: number;
+  key: string;
+};
 
-const EMPTY: OverlayInfo = { port: 0, url: "", clients: 0 };
+const EMPTY: OverlayInfo = { port: 0, url: "", clients: 0, key: "" };
 let info: OverlayInfo = EMPTY;
 const listeners = new Set<(i: OverlayInfo) => void>();
 
 function setInfo(next: OverlayInfo) {
+  setOverlayKey(next.key);
   info = next;
   for (const l of listeners) l(next);
 }

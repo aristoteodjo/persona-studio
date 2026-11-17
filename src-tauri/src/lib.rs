@@ -94,7 +94,9 @@ pub fn run() {
         .setup(|app| {
             let root = app.path().app_data_dir()?.join("profiles");
             std::fs::create_dir_all(&root)?;
-            let hub = Arc::new(OverlayHub::new());
+            let data_dir = app.path().app_data_dir()?;
+            let key = overlay::load_or_create_key(&data_dir.join("overlay.key"))?;
+            let hub = Arc::new(OverlayHub::new(key));
             app.manage(ProfilesDir(root.clone()));
             app.manage(hub.clone());
             tauri::async_runtime::spawn(overlay::start(app.handle().clone(), hub, root));

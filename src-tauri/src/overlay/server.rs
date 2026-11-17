@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use axum::body::Body;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Path, Request, State};
+use axum::extract::{Path, Query, Request, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode, Uri};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Redirect, Response};
@@ -100,8 +100,11 @@ async fn overlay_page(State(ctx): State<Ctx>) -> Response {
     if tauri::is_dev() {
         if let Some(dev) = ctx.app.config().build.dev_url.clone() {
             let base = dev.as_str().trim_end_matches('/');
-            return Redirect::temporary(&format!("{base}/overlay.html?port={port}"))
-                .into_response();
+            return Redirect::temporary(&format!(
+                "{base}/overlay.html?port={port}&key={}",
+                ctx.hub.key
+            ))
+            .into_response();
         }
     }
     serve_asset(&ctx.app, "/overlay.html")
@@ -129,11 +132,20 @@ fn serve_asset(app: &AppHandle, path: &str) -> Response {
     }
 }
 
+#[derive(serde::Deserialize)]
+struct KeyQuery {
+    key: Option<String>,
+}
+
 async fn media(
     State(ctx): State<Ctx>,
+    Query(q): Query<KeyQuery>,
     headers: HeaderMap,
     Path((profile, file)): Path<(String, String)>,
 ) -> Response {
+    if !ctx.hub.key_matches(q.key.as_deref()) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     let Some(path) = profiles::media_path(&ctx.profiles_root, &profile, &file) else {
         return StatusCode::NOT_FOUND.into_response();
     };
@@ -168,8 +180,13 @@ async fn media(
     }
 }
 
-async fn ws_upgrade(State(ctx): State<Ctx>, headers: HeaderMap, ws: WebSocketUpgrade) -> Response {
-    if !ctx.origin_ok(&headers) {
+async fn ws_upgrade(
+    State(ctx): State<Ctx>,
+    Query(q): Query<KeyQuery>,
+    headers: HeaderMap,
+    ws: WebSocketUpgrade,
+) -> Response {
+    if !ctx.origin_ok(&headers) || !ctx.hub.key_matches(q.key.as_deref()) {
         return StatusCode::FORBIDDEN.into_response();
     }
     ws.on_upgrade(move |socket| client_loop(ctx, socket))

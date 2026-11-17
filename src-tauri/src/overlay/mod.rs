@@ -10,6 +10,19 @@ use tokio::sync::{broadcast, mpsc};
 
 pub use server::start;
 
+/// Loads the overlay key, creating it on first launch so the OBS URL stays stable.
+pub fn load_or_create_key(path: &std::path::Path) -> std::io::Result<String> {
+    if let Ok(k) = std::fs::read_to_string(path) {
+        let k = k.trim();
+        if k.len() == 32 && k.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Ok(k.to_string());
+        }
+    }
+    let key = uuid::Uuid::new_v4().simple().to_string();
+    std::fs::write(path, &key)?;
+    Ok(key)
+}
+
 pub const BASE_PORT: u16 = 39540;
 pub const PORT_ATTEMPTS: u16 = 10;
 pub const MAX_FRAME_BYTES: usize = 16 * 1024;
@@ -19,6 +32,9 @@ pub const MAX_SIGNAL_BYTES: usize = 64 * 1024;
 /// Relay between the studio window and every overlay (OBS browser sources).
 /// The studio owns the rig; overlays only render what they receive.
 pub struct OverlayHub {
+    /// Secret required on /ws and /media: binding to loopback still lets any local
+    /// process connect, and the WebSocket carries the microphone over WebRTC.
+    key: String,
     port: AtomicU16,
     next_id: AtomicU64,
     /// Direct channel to each connected overlay, used for per-client WebRTC signaling.
@@ -32,12 +48,14 @@ pub struct OverlayInfo {
     pub port: u16,
     pub url: String,
     pub clients: usize,
+    pub key: String,
 }
 
 impl OverlayHub {
-    pub fn new() -> Self {
+    pub fn new(key: String) -> Self {
         let (tx, _) = broadcast::channel(8);
         Self {
+            key,
             port: AtomicU16::new(0),
             next_id: AtomicU64::new(1),
             clients: Mutex::new(HashMap::new()),
@@ -53,9 +71,10 @@ impl OverlayHub {
             url: if port == 0 {
                 String::new()
             } else {
-                format!("http://127.0.0.1:{port}/overlay")
+                format!("http://127.0.0.1:{port}/overlay?key={}", self.key)
             },
             clients: self.client_ids().len(),
+            key: self.key.clone(),
         }
     }
 
@@ -110,14 +129,15 @@ impl OverlayHub {
         Ok(())
     }
 
+    pub fn key_matches(&self, candidate: Option<&str>) -> bool {
+        let Some(c) = candidate else { return false };
+        let (a, b) = (self.key.as_bytes(), c.as_bytes());
+        // Length leaks nothing useful (it is fixed); compare the bytes in constant time.
+        a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+    }
+
     fn current_profile(&self) -> Option<Arc<str>> {
         self.profile.read().ok().and_then(|p| p.clone())
-    }
-}
-
-impl Default for OverlayHub {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -127,7 +147,7 @@ mod tests {
 
     #[tokio::test]
     async fn late_subscribers_get_profile_and_live_frames() {
-        let hub = OverlayHub::new();
+        let hub = OverlayHub::new("k".repeat(32));
         hub.set_profile("p1".into());
         let mut rx = hub.tx.subscribe();
         assert_eq!(hub.current_profile().as_deref(), Some("p1"));
@@ -138,7 +158,7 @@ mod tests {
 
     #[tokio::test]
     async fn direct_messages_reach_only_their_client() {
-        let hub = OverlayHub::new();
+        let hub = OverlayHub::new("k".repeat(32));
         let (a, mut rx_a) = hub.register();
         let (b, mut rx_b) = hub.register();
         assert_eq!(hub.client_ids(), vec![a, b]);
@@ -153,9 +173,15 @@ mod tests {
 
     #[test]
     fn url_is_empty_until_bound() {
-        let hub = OverlayHub::new();
+        let hub = OverlayHub::new("k".repeat(32));
         assert!(hub.info().url.is_empty());
         hub.port.store(BASE_PORT, Ordering::Relaxed);
-        assert_eq!(hub.info().url, "http://127.0.0.1:39540/overlay");
+        assert!(hub
+            .info()
+            .url
+            .starts_with("http://127.0.0.1:39540/overlay?key="));
+        assert!(hub.key_matches(Some(&"k".repeat(32))));
+        assert!(!hub.key_matches(Some("k")));
+        assert!(!hub.key_matches(None));
     }
 }

@@ -1,10 +1,11 @@
+import { overlayKey } from "@/modules/overlay-link/key";
 import type { Motion } from "@/modules/profiles/schema";
 
 /** Share of the stage height the avatar fills at scale 1, anchored bottom center. */
 export const STAGE_FILL = 0.92;
 
 export function mediaUrl(base: string, profileId: string, file: string) {
-  return `${base}/media/${profileId}/${file}`;
+  return `${base}/media/${profileId}/${file}?key=${overlayKey()}`;
 }
 
 /** Fits an image in the stage (contain, bottom-centered) then applies the profile scale and offset. */

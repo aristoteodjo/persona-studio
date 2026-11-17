@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AvatarStage } from "@/modules/avatar";
+import { overlayKey, setOverlayKey } from "@/modules/overlay-link/key";
 import { parseOverlayMessage } from "@/modules/overlay-link/protocol";
 import type { Profile } from "@/modules/profiles/schema";
 import { idleFrame, type RigFrame } from "@/modules/rig/rig";
 import { VoiceReceiver } from "@/overlay/voice-receiver";
+
+setOverlayKey(new URLSearchParams(location.search).get("key") ?? "");
 
 function serverBase(): string {
   const port = new URLSearchParams(location.search).get("port");
@@ -31,7 +34,9 @@ export function OverlayApp() {
     });
     voice.onLive = setVoiceLive;
     const connect = () => {
-      ws = new WebSocket(`${base.replace(/^http/, "ws")}/ws`);
+      ws = new WebSocket(
+        `${base.replace(/^http/, "ws")}/ws?key=${overlayKey()}`,
+      );
       ws.onopen = () => {
         retry = 0;
         setConnected(true);
