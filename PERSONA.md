@@ -61,7 +61,7 @@ Persona (profil), Expression, État (repos, parle, cligne, parle + cligne), Pupp
 6. Atelier 1 : recoloration de texture qui garde les ombres (`avatar/vrm/recolor.ts`, pur), motifs par partie (`patterns.ts`, `TextureEditor` recalcule depuis la texture d'origine), décor pour tous les avatars (`scene.background`) et ambiances lumineuses 3D (`avatar/lighting.ts`), actions rapides d'humeur VRM (touches 1 à 6). **Fait (2026-11-17).**
 7. Atelier 2 (créateur type VRoid, avec nos propres assets) : à cadrer, voir décisions ouvertes.
 8. Live2D (Cubism SDK, voir décisions ouvertes).
-9. Placement manuel des repères du visage quand la détection échoue (personnages très stylisés).
+9. Placement manuel des repères du visage quand la détection échoue (personnages très stylisés) : 19 repères posés à la main (`avatar/puppet/manual.ts`, pur, testé), les 468 points suivent par plaque mince depuis le visage canonique MediaPipe (`canonical-face.ts`) ou depuis la détection existante pour l'ajuster. **Code fait (2026-11-17), validation dans l'app à faire.**
 
 ## Décisions
 

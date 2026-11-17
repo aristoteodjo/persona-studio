@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
-import { CheckCircle2, RefreshCw, TriangleAlert } from "lucide-react";
+import { CheckCircle2, MapPin, RefreshCw, TriangleAlert } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -17,6 +18,7 @@ import {
   SliderField,
   useImageImport,
 } from "@/modules/studio/components/fields";
+import { FaceMarkerModal } from "@/modules/studio/components/FaceMarkerModal";
 import { detectFaceOnImage } from "@/modules/tracking";
 
 export const PUPPET_DROP_ID = "puppet:image";
@@ -26,6 +28,7 @@ type Props = { profile: PuppetProfile; dropHover: string | null };
 export function PuppetEditor({ profile, dropHover }: Props) {
   const update = useProfiles((s) => s.update);
   const { puppet } = profile;
+  const [markersOpen, setMarkersOpen] = useState(false);
 
   const patch = (next: Partial<PuppetConfig>) =>
     update(profile.id, (p) =>
@@ -105,8 +108,7 @@ export function PuppetEditor({ profile, dropHover }: Props) {
             >
               <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
               Aucun visage reconnu. Essaie un portrait de face, plus grand dans
-              le cadre et bien éclairé. Pour un personnage très stylisé, préfère
-              un profil 2D.
+              le cadre et bien éclairé, ou place les repères toi-même.
             </p>
           ) : (
             <p className="text-muted-foreground">
@@ -115,17 +117,44 @@ export function PuppetEditor({ profile, dropHover }: Props) {
             </p>
           )}
           {puppet.image && !detect.isPending ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="self-start"
-              onClick={() => puppet.image && detect.mutate(puppet.image)}
-            >
-              <RefreshCw /> Relancer la détection
-            </Button>
+            <div className="flex flex-wrap gap-1">
+              <Button
+                size="sm"
+                variant={failed ? "default" : "ghost"}
+                onClick={() => setMarkersOpen(true)}
+              >
+                <MapPin />{" "}
+                {ready ? "Ajuster les repères" : "Placer les repères"}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => puppet.image && detect.mutate(puppet.image)}
+              >
+                <RefreshCw /> Relancer la détection
+              </Button>
+            </div>
           ) : null}
         </div>
       </div>
+
+      {puppet.image ? (
+        <FaceMarkerModal
+          open={markersOpen}
+          onOpenChange={setMarkersOpen}
+          profileId={profile.id}
+          image={puppet.image}
+          landmarks={ready ? puppet.landmarks : []}
+          size={
+            ready && puppet.width && puppet.height
+              ? { width: puppet.width, height: puppet.height }
+              : null
+          }
+          onSave={(landmarks, size) =>
+            patch({ landmarks, width: size.width, height: size.height })
+          }
+        />
+      ) : null}
 
       <SliderField
         label="Ouverture de la bouche"
