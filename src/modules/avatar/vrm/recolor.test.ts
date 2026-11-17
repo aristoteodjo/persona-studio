@@ -48,4 +48,13 @@ describe("recolor", () => {
     recolor(data, hexToHsl("#ff0000"), averageHsl(data, 1));
     expect(data[0]).toBeGreaterThan((data[1] ?? 0) + 50);
   });
+
+  it("colors every pixel of a near-white texture, grey ones included", () => {
+    const data = px(250, 250, 250, 255, 200, 200, 205, 255, 240, 235, 255, 255);
+    recolor(data, hexToHsl("#d6334a"), averageHsl(data, 1));
+    for (let i = 0; i < data.length; i += 4) {
+      const c = rgbToHsl(data[i] ?? 0, data[i + 1] ?? 0, data[i + 2] ?? 0);
+      expect(c.s).toBeGreaterThan(0.4);
+    }
+  });
 });

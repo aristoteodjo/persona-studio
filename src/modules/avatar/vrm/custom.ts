@@ -85,6 +85,12 @@ export function describeModel(vrm: VRM, map: Map<string, Original[]>) {
 
 const tint = new Color();
 
+/** Same brightness as `from`, without its hue (channels are linear in three). */
+export function grayOf(out: Color, from: Color): Color {
+  const y = 0.2126 * from.r + 0.7152 * from.g + 0.0722 * from.b;
+  return out.setRGB(y, y, y);
+}
+
 /** Re-applies every override from the originals, so removing one restores the model. */
 export function applyCustom(
   vrm: VRM,
@@ -95,14 +101,19 @@ export function applyCustom(
     const cfg = custom.materials[key];
     for (const o of list) {
       o.material.visible = o.visible && !cfg?.hidden;
-      // Textured parts are recolored in their texture (TextureEditor); flat ones by their factor.
+      // Textured parts are recolored in their textures (TextureEditor); flat ones by their factor.
       const flat = cfg?.color && !o.textured ? cfg.color : null;
+      // A recolored texture must not be tinted back by the model's own factors (VRoid
+      // often colors clothes through them), so those keep only their brightness.
+      const neutral = Boolean(cfg?.color && o.textured);
       if (o.material.color && o.color) {
         if (flat) o.material.color.set(flat);
+        else if (neutral) grayOf(o.material.color, o.color);
         else o.material.color.copy(o.color);
       }
       if (o.material.shadeColorFactor && o.shade) {
-        o.material.shadeColorFactor.copy(o.shade);
+        if (neutral) grayOf(o.material.shadeColorFactor, o.shade);
+        else o.material.shadeColorFactor.copy(o.shade);
         if (flat) o.material.shadeColorFactor.multiply(tint.set(flat));
       }
     }

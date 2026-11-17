@@ -8,15 +8,21 @@ import {
 } from "@/modules/avatar/vrm/recolor";
 import type { VrmCustom } from "@/modules/profiles/schema";
 
-type Mapped = Material & { map?: Texture | null; needsUpdate: boolean };
+type Slot = "map" | "shadeMultiplyTexture";
+/** MToon draws lit areas from `map` and shaded ones from `shadeMultiplyTexture`: both are edited. */
+const SLOTS: Slot[] = ["map", "shadeMultiplyTexture"];
+
+type Mapped = Material &
+  Partial<Record<Slot, Texture | null>> & { needsUpdate: boolean };
 
 type Source = { width: number; height: number; pixels: ImageData; avg: Hsl };
 
-/** Keeps each material's original texture so edits are always recomputed from it. */
+/** Keeps each material's original textures so edits are always recomputed from them. */
 export class TextureEditor {
-  private originals = new Map<Mapped, Texture>();
+  private originals = new Map<Mapped, Partial<Record<Slot, Texture>>>();
   private sources = new Map<Texture, Source>();
-  private generated = new Map<Mapped, CanvasTexture>();
+  private generated = new Map<string, CanvasTexture>();
+  private ids = new Map<Mapped, number>();
   private token = 0;
 
   constructor(private parts: Map<string, Material[]>) {}
@@ -43,6 +49,27 @@ export class TextureEditor {
     return src;
   }
 
+  private originalsOf(m: Mapped) {
+    let o = this.originals.get(m);
+    if (!o) {
+      o = {};
+      for (const slot of SLOTS) {
+        const t = m[slot];
+        if (t) o[slot] = t;
+      }
+      this.originals.set(m, o);
+      this.ids.set(m, this.ids.size);
+    }
+    return o;
+  }
+
+  private restore(m: Mapped, slot: Slot, original: Texture) {
+    if (m[slot] !== original) {
+      m[slot] = original;
+      m.needsUpdate = true;
+    }
+  }
+
   /** Recolors and patterns every part; stale runs are dropped when edits come fast. */
   async apply(custom: VrmCustom) {
     const token = ++this.token;
@@ -52,41 +79,45 @@ export class TextureEditor {
         // Yield between parts so slider drags never freeze the render loop.
         await new Promise((r) => setTimeout(r, 0));
         if (token !== this.token) return;
-        const original = this.originals.get(m) ?? m.map ?? null;
-        if (!original) continue;
-        if (!this.originals.has(m)) this.originals.set(m, original);
-        if (!cfg?.color && !cfg?.pattern) {
-          if (m.map !== original) {
-            m.map = original;
+        const originals = this.originalsOf(m);
+        const lit = originals.map ? this.source(originals.map) : null;
+        for (const slot of SLOTS) {
+          const original = originals[slot];
+          if (!original) continue;
+          if (!cfg?.color && !cfg?.pattern) {
+            this.restore(m, slot, original);
+            continue;
+          }
+          const src = this.source(original);
+          if (!src) continue;
+          const data = new Uint8ClampedArray(src.pixels.data);
+          // The shade texture moves with the lit one so the light/shadow contrast survives.
+          if (cfg.color) recolor(data, hexToHsl(cfg.color), (lit ?? src).avg);
+          const canvas = new OffscreenCanvas(src.width, src.height);
+          const ctx = canvas.getContext("2d");
+          if (!ctx) continue;
+          ctx.putImageData(new ImageData(data, src.width, src.height), 0, 0);
+          if (cfg.pattern) {
+            paintPattern(ctx, src.width, src.height, cfg.pattern);
+          }
+          const id = `${this.ids.get(m)}:${slot}`;
+          let tex = this.generated.get(id);
+          if (!tex) {
+            tex = new CanvasTexture(canvas as unknown as HTMLCanvasElement);
+            tex.flipY = original.flipY;
+            tex.colorSpace = original.colorSpace;
+            tex.wrapS = original.wrapS;
+            tex.wrapT = original.wrapT;
+            tex.channel = original.channel;
+            this.generated.set(id, tex);
+          } else {
+            tex.image = canvas as unknown as HTMLCanvasElement;
+          }
+          tex.needsUpdate = true;
+          if (m[slot] !== tex) {
+            m[slot] = tex;
             m.needsUpdate = true;
           }
-          continue;
-        }
-        const src = this.source(original);
-        if (!src) continue;
-        const data = new Uint8ClampedArray(src.pixels.data);
-        if (cfg.color) recolor(data, hexToHsl(cfg.color), src.avg);
-        const canvas = new OffscreenCanvas(src.width, src.height);
-        const ctx = canvas.getContext("2d");
-        if (!ctx) continue;
-        ctx.putImageData(new ImageData(data, src.width, src.height), 0, 0);
-        if (cfg.pattern) paintPattern(ctx, src.width, src.height, cfg.pattern);
-        let tex = this.generated.get(m);
-        if (!tex) {
-          tex = new CanvasTexture(canvas as unknown as HTMLCanvasElement);
-          tex.flipY = original.flipY;
-          tex.colorSpace = original.colorSpace;
-          tex.wrapS = original.wrapS;
-          tex.wrapT = original.wrapT;
-          tex.channel = original.channel;
-          this.generated.set(m, tex);
-        } else {
-          tex.image = canvas as unknown as HTMLCanvasElement;
-        }
-        tex.needsUpdate = true;
-        if (m.map !== tex) {
-          m.map = tex;
-          m.needsUpdate = true;
         }
       }
     }

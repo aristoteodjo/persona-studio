@@ -68,18 +68,18 @@ const clamp01 = (v: number) => Math.min(Math.max(v, 0), 1);
 
 /**
  * Moves every pixel so the part's average color becomes `target`: the hue is
- * set, saturation scaled and lightness offset, so folds and shadows survive.
+ * set, saturation and lightness are offset, so folds and shadows survive.
+ * An offset (not a ratio) also colors pure grey pixels of near-white textures.
  */
 export function recolor(data: Uint8ClampedArray, target: Hsl, avg: Hsl): void {
-  const satScale = avg.s > 0.02 ? target.s / avg.s : 1;
-  const satAdd = avg.s > 0.02 ? 0 : target.s;
+  const ds = target.s - avg.s;
   const dl = target.l - avg.l;
   for (let i = 0; i < data.length; i += 4) {
     if ((data[i + 3] ?? 0) === 0) continue;
     const px = rgbToHsl(data[i] ?? 0, data[i + 1] ?? 0, data[i + 2] ?? 0);
     const [r, g, b] = hslToRgb({
       h: target.h,
-      s: clamp01(px.s * satScale + satAdd),
+      s: clamp01(px.s + ds),
       l: clamp01(px.l + dl),
     });
     data[i] = r;
