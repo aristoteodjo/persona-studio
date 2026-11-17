@@ -47,6 +47,8 @@ export const vrmSchema = z.object({
   emotion: unit(0, 2, 1),
   /** How far the arms drop from the T-pose, in radians. */
   arms: unit(0, 1.5, 1.2),
+  /** Arms and fingers follow the camera when the hands are visible. */
+  gestures: z.boolean().catch(true).default(true),
 });
 
 export const voiceChangerSchema = z.object({

@@ -16,6 +16,7 @@ import {
 } from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { mediaUrl } from "@/modules/avatar/layout";
+import { applyArms } from "@/modules/avatar/vrm/arms";
 import { forMetaVersion, vrmPose } from "@/modules/avatar/vrm/pose";
 import type { VrmProfile } from "@/modules/profiles/schema";
 import type { RigFrame } from "@/modules/rig/rig";
@@ -32,8 +33,6 @@ const BONES = [
   "head",
   "spine",
   "chest",
-  "leftUpperArm",
-  "rightUpperArm",
 ] as const satisfies readonly VRMHumanBoneName[];
 
 const FOV = 25;
@@ -147,7 +146,8 @@ export default function VrmView({
       camera.lookAt(target);
 
       if (vrm) {
-        const pose = vrmPose(getFrame(), cfg, motion, now);
+        const frame = getFrame();
+        const pose = vrmPose(frame, cfg, motion, now);
         const version = vrm.meta.metaVersion === "0" ? "0" : "1";
         for (const bone of BONES) {
           const node = vrm.humanoid.getNormalizedBoneNode(bone);
@@ -155,6 +155,7 @@ export default function VrmView({
           const r = forMetaVersion(pose[bone], version);
           node.rotation.set(r.x, r.y, r.z);
         }
+        applyArms(vrm, frame.arms, cfg, dt);
         const em = vrm.expressionManager;
         if (em) {
           for (const [name, weight] of Object.entries(pose.expressions)) {

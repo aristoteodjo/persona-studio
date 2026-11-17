@@ -1,4 +1,6 @@
 import { Box, Loader2, Upload } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import type { VrmConfig, VrmProfile } from "@/modules/profiles/schema";
 import { useProfiles } from "@/modules/profiles/store";
@@ -99,8 +101,23 @@ export function VrmEditor({ profile, dropHover }: Props) {
             max={2}
             onChange={(emotion) => patch({ emotion })}
           />
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col gap-0.5">
+              <Label htmlFor="vrm-gestures">Suivre mes bras et mes mains</Label>
+              <span className="text-xs leading-relaxed text-muted-foreground">
+                Quand tes mains sont visibles à la caméra, l'avatar reprend tes
+                gestes et la fermeture de tes doigts. Recule un peu pour que tes
+                coudes soient dans le cadre.
+              </span>
+            </div>
+            <Switch
+              id="vrm-gestures"
+              checked={vrm.gestures}
+              onCheckedChange={(v) => patch({ gestures: Boolean(v) })}
+            />
+          </div>
           <SliderField
-            label="Position des bras"
+            label="Position des bras au repos"
             value={vrm.arms}
             min={0}
             max={1.5}

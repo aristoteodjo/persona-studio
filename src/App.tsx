@@ -43,6 +43,11 @@ export function App() {
     engine.setVoice(activeVoice ?? voiceSchema.parse({}), monitorVoice);
   }, [activeVoice, monitorVoice]);
 
+  const gestures = active?.kind === "vrm" && active.vrm.gestures;
+  useEffect(() => {
+    engine.setGestures(gestures);
+  }, [gestures]);
+
   // The overlay always shows the active profile; re-sent when the server restarts or a client connects.
   useEffect(() => {
     if (!loaded || !overlay.port) return;

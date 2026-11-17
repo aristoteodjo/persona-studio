@@ -18,7 +18,13 @@ import {
   updateTalk,
 } from "@/modules/rig/rig";
 import { getSettings, useSettings } from "@/modules/settings/store";
-import { faceLandmarker } from "@/modules/tracking/vision";
+import {
+  type ArmPose,
+  armsFromPose,
+  avatarWrists,
+  fingerCurls,
+} from "@/modules/rig/gestures";
+import { faceLandmarker, gestureLandmarkers } from "@/modules/tracking/vision";
 import { VoiceGraph } from "@/modules/voice/graph";
 import { type ShoutState, updateShout } from "@/modules/voice/presets";
 import { voiceSender } from "@/modules/voice/rtc";
@@ -86,6 +92,12 @@ class Engine {
   private voiceBuilding = false;
   private voiceCfg: VoiceConfig = voiceSchema.parse({});
   private monitor = false;
+  private gesturesOn = false;
+  private gestureModels: Awaited<ReturnType<typeof gestureLandmarkers>> | null =
+    null;
+  private arms: ArmPose | null = null;
+  private armsAt = 0;
+  private gestureFrame = 0;
 
   private clock: Worker | null = null;
   private timer = 0;
@@ -266,6 +278,62 @@ class Engine {
     this.voiceGraph = null;
   }
 
+  /** Arm and hand tracking costs two extra models: only on for 3D avatars that use it. */
+  setGestures(on: boolean) {
+    this.gesturesOn = on;
+    if (!on) {
+      this.arms = null;
+      return;
+    }
+    if (!this.gestureModels) {
+      gestureLandmarkers()
+        .then((m) => {
+          this.gestureModels = m;
+        })
+        .catch((e) => console.error("gesture models failed", e));
+    }
+  }
+
+  private readGestures(video: HTMLVideoElement, now: number) {
+    const models = this.gestureModels;
+    if (!this.gesturesOn || !models) return;
+    // Every other camera frame keeps the extra models around 15 Hz.
+    this.gestureFrame = (this.gestureFrame + 1) % 2;
+    if (this.gestureFrame !== 0) return;
+    const mirror = getSettings().mirror;
+    const pose = models.pose.detectForVideo(video, now);
+    const world = pose.worldLandmarks[0];
+    const image = pose.landmarks[0];
+    if (!world || !image) {
+      this.arms = null;
+      return;
+    }
+    const sides = armsFromPose(world, mirror);
+    const wrists = avatarWrists(image, mirror);
+    const curls: Record<"left" | "right", ReturnType<typeof fingerCurls>> = {
+      left: null,
+      right: null,
+    };
+    const hands = models.hands.detectForVideo(video, now);
+    hands.landmarks.forEach((hand, i) => {
+      const w = hand[0];
+      const handWorld = hands.worldLandmarks[i];
+      if (!w || !handWorld) return;
+      // Pair each detected hand with the nearest tracked wrist of the body.
+      const dist = (p: { x: number; y: number } | null) =>
+        p ? Math.hypot(p.x - w.x, p.y - w.y) : Number.POSITIVE_INFINITY;
+      const dl = dist(wrists.left);
+      const dr = dist(wrists.right);
+      const key = dl <= dr ? "left" : "right";
+      if (Math.min(dl, dr) < 0.15) curls[key] = fingerCurls(handWorld);
+    });
+    this.arms = {
+      left: sides.left ? { ...sides.left, curl: curls.left } : null,
+      right: sides.right ? { ...sides.right, curl: curls.right } : null,
+    };
+    this.armsAt = now;
+  }
+
   calibrate() {
     this.calibrateNext = true;
   }
@@ -277,6 +345,11 @@ class Engine {
     if (video.currentTime === this.lastVideoTime) return;
     this.lastVideoTime = video.currentTime;
     const result = lm.detectForVideo(video, now);
+    try {
+      this.readGestures(video, now);
+    } catch (e) {
+      console.error("gesture tracking failed", e);
+    }
     const face = result.faceLandmarks[0];
     if (!face) {
       this.signals = null;
@@ -338,6 +411,10 @@ class Engine {
     target.voice = level;
     const hasFace = s !== null && now - this.lastFaceAt < 500;
     target.face = hasFace;
+    target.arms =
+      this.gesturesOn && this.arms && now - this.armsAt < 400
+        ? this.arms
+        : null;
     if (s && hasFace) {
       Object.assign(
         target,

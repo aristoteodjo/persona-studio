@@ -1,3 +1,4 @@
+import type { ArmPose } from "@/modules/rig/gestures";
 import { LM } from "@/modules/rig/landmarks";
 
 /**
@@ -22,6 +23,8 @@ export type RigFrame = {
   talking: boolean;
   voice: number;
   expressionId: string | null;
+  /** Tracked arms and fingers, null when the hands are out of view or gestures are off. */
+  arms: ArmPose | null;
 };
 
 export type HeadPose = {
@@ -74,6 +77,7 @@ export function idleFrame(t = 0): RigFrame {
     talking: false,
     voice: 0,
     expressionId: null,
+    arms: null,
   };
 }
 

@@ -56,7 +56,7 @@ Persona (profil), Expression, État (repos, parle, cligne, parle + cligne), Pupp
 1. Socle, profils 2D et 2.5D, tracking webcam/micro, overlay OBS, raccourcis globaux. **Fait (2026-11-17).**
 2. Modèles 3D VRM (three-vrm, `kind: "vrm"`, chargé à la demande). **Fait (2026-11-17).**
 3. Voix : changeur de voix (AudioWorklet de hauteur + effets WebAudio) envoyé à chaque overlay en WebRTC local (signalisation via le WebSocket, hub Rust bidirectionnel avec un id par overlay) ; animation par la voix par persona (seuil, gain de bouche, cri). **Fait (2026-11-17).**
-4. Gestes : bras et mains (MediaPipe Pose/Hand) pour les profils VRM.
+4. Gestes VRM : bras (MediaPipe Pose lite, world landmarks) et doigts (Hand Landmarker, flexion par doigt), ~15 Hz, seulement si un profil VRM a `gestures` actif ; `rig/gestures.ts` (pur, testé) puis `avatar/vrm/arms.ts` (slerp vers la pose, retour au repos hors champ). **Fait (2026-11-17).**
 5. Live2D (Cubism SDK, voir décisions ouvertes).
 6. Placement manuel des repères du visage quand la détection échoue (personnages très stylisés).
 
@@ -76,4 +76,5 @@ Persona (profil), Expression, État (repos, parle, cligne, parle + cligne), Pupp
 - Les captures Chrome headless (`--screenshot`) sont prises au `load` : un canvas WebGL ou un modèle chargé en asynchrone n'y apparaît pas. Vérifier la 3D dans l'app (capture de fenêtre).
 
 - Biome prend `gl.useProgram` pour un hook : règle désactivée seulement pour `avatar/puppet/renderer.ts`.
+- `tauri build` échoue si le bundle est en cours d'exécution : quitter l'app avant de reconstruire.
 - Le port Vite 1420 est déjà pris dans Portly par un autre projet ; on utilise 1436/1437.

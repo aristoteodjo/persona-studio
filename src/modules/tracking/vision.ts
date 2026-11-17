@@ -1,6 +1,8 @@
 import type {
   FaceLandmarker,
   FaceLandmarkerOptions,
+  HandLandmarker,
+  PoseLandmarker,
 } from "@mediapipe/tasks-vision";
 import { FACE_LANDMARK_COUNT } from "@/modules/profiles/schema";
 
@@ -36,6 +38,53 @@ export function faceLandmarker(mode: Mode): Promise<FaceLandmarker> {
   })();
   created.catch(() => cache.delete(mode));
   cache.set(mode, created);
+  return created;
+}
+
+type Gestures = { pose: PoseLandmarker; hands: HandLandmarker };
+let gestures: Promise<Gestures> | null = null;
+
+/** Body and hand models for arm gestures; loaded only when a 3D avatar uses them. */
+export function gestureLandmarkers(): Promise<Gestures> {
+  if (gestures) return gestures;
+  const created = (async () => {
+    const { FilesetResolver, HandLandmarker, PoseLandmarker } = await import(
+      "@mediapipe/tasks-vision"
+    );
+    const fileset = await FilesetResolver.forVisionTasks(WASM_BASE);
+    const make = async <T>(fn: (d: "GPU" | "CPU") => Promise<T>) => {
+      try {
+        return await fn("GPU");
+      } catch {
+        return await fn("CPU");
+      }
+    };
+    const pose = await make((delegate) =>
+      PoseLandmarker.createFromOptions(fileset, {
+        baseOptions: {
+          modelAssetPath: "/models/pose_landmarker_lite.task",
+          delegate,
+        },
+        runningMode: "VIDEO",
+        numPoses: 1,
+      }),
+    );
+    const hands = await make((delegate) =>
+      HandLandmarker.createFromOptions(fileset, {
+        baseOptions: {
+          modelAssetPath: "/models/hand_landmarker.task",
+          delegate,
+        },
+        runningMode: "VIDEO",
+        numHands: 2,
+      }),
+    );
+    return { pose, hands };
+  })();
+  created.catch(() => {
+    gestures = null;
+  });
+  gestures = created;
   return created;
 }
 

@@ -1,4 +1,5 @@
 import { type Profile, profileSchema } from "@/modules/profiles/schema";
+import { isArmPose } from "@/modules/rig/gestures";
 import type { RigFrame } from "@/modules/rig/rig";
 
 export type IceCandidate = {
@@ -75,7 +76,8 @@ function isFrame(v: unknown): v is RigFrame {
     NUMERIC.every((k) => typeof f[k] === "number" && Number.isFinite(f[k])) &&
     typeof f.talking === "boolean" &&
     typeof f.face === "boolean" &&
-    (f.expressionId === null || typeof f.expressionId === "string")
+    (f.expressionId === null || typeof f.expressionId === "string") &&
+    isArmPose(f.arms)
   );
 }
 
@@ -90,7 +92,9 @@ export function parseOverlayMessage(raw: string): OverlayMessage | null {
   if (typeof data !== "object" || data === null) return null;
   const msg = data as Record<string, unknown>;
   if (msg.type === "frame") {
-    return isFrame(msg.frame) ? { type: "frame", frame: msg.frame } : null;
+    return isFrame(msg.frame)
+      ? { type: "frame", frame: { ...msg.frame, arms: msg.frame.arms ?? null } }
+      : null;
   }
   if (msg.type === "profile") {
     if (msg.profile === null) return { type: "profile", profile: null };
