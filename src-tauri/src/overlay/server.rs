@@ -10,12 +10,13 @@ use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::get;
 use axum::Router;
+use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use tokio::net::TcpListener;
 use tokio::sync::broadcast::error::RecvError;
 
 use super::guard::{host_allowed, origin_allowed};
-use super::{OverlayHub, BASE_PORT, PORT_ATTEMPTS};
+use super::{OverlayHub, BASE_PORT, MAX_SIGNAL_BYTES, PORT_ATTEMPTS};
 use crate::profiles;
 
 #[derive(Clone)]
@@ -178,42 +179,79 @@ fn notify_clients(ctx: &Ctx) {
     let _ = ctx.app.emit("overlay://info", ctx.hub.info());
 }
 
+#[derive(Serialize, Clone)]
+struct ClientEvent {
+    id: u64,
+    connected: bool,
+}
+
+#[derive(Serialize, Clone)]
+struct SignalEvent<'a> {
+    from: u64,
+    message: &'a str,
+}
+
 async fn client_loop(ctx: Ctx, mut socket: WebSocket) {
     let mut rx = ctx.hub.tx.subscribe();
-    ctx.hub.clients.fetch_add(1, Ordering::Relaxed);
+    let (id, mut direct) = ctx.hub.register();
     notify_clients(&ctx);
 
-    if let Some(profile) = ctx.hub.current_profile() {
-        if socket
+    let greeted = match ctx.hub.current_profile() {
+        Some(profile) => socket
             .send(Message::Text(profile.as_ref().into()))
             .await
-            .is_err()
-        {
-            ctx.hub.clients.fetch_sub(1, Ordering::Relaxed);
-            notify_clients(&ctx);
-            return;
-        }
-    }
-
-    loop {
-        tokio::select! {
-            msg = rx.recv() => match msg {
-                Ok(text) => {
-                    if socket.send(Message::Text(text.as_ref().into())).await.is_err() {
-                        break;
+            .is_ok(),
+        None => true,
+    };
+    if greeted {
+        let _ = ctx.app.emit(
+            "overlay://client",
+            ClientEvent {
+                id,
+                connected: true,
+            },
+        );
+        loop {
+            tokio::select! {
+                msg = rx.recv() => match msg {
+                    Ok(text) => {
+                        if socket.send(Message::Text(text.as_ref().into())).await.is_err() {
+                            break;
+                        }
                     }
-                }
-                // A slow overlay skips stale frames instead of building a backlog.
-                Err(RecvError::Lagged(_)) => continue,
-                Err(RecvError::Closed) => break,
-            },
-            incoming = socket.recv() => match incoming {
-                Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
-                Some(Ok(_)) => {}
-            },
+                    // A slow overlay skips stale frames instead of building a backlog.
+                    Err(RecvError::Lagged(_)) => continue,
+                    Err(RecvError::Closed) => break,
+                },
+                msg = direct.recv() => match msg {
+                    Some(text) => {
+                        if socket.send(Message::Text(text.as_ref().into())).await.is_err() {
+                            break;
+                        }
+                    }
+                    None => break,
+                },
+                incoming = socket.recv() => match incoming {
+                    Some(Ok(Message::Text(text))) => {
+                        // Overlays only ever send WebRTC signaling back to the studio.
+                        if text.len() <= MAX_SIGNAL_BYTES {
+                            let _ = ctx.app.emit("overlay://signal", SignalEvent { from: id, message: text.as_str() });
+                        }
+                    }
+                    Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
+                    Some(Ok(_)) => {}
+                },
+            }
         }
     }
 
-    ctx.hub.clients.fetch_sub(1, Ordering::Relaxed);
+    ctx.hub.unregister(id);
+    let _ = ctx.app.emit(
+        "overlay://client",
+        ClientEvent {
+            id,
+            connected: false,
+        },
+    );
     notify_clients(&ctx);
 }

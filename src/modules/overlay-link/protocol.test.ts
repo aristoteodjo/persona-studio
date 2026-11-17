@@ -24,6 +24,25 @@ describe("overlay protocol", () => {
     });
   });
 
+  it("validates webrtc signaling", () => {
+    expect(parseOverlayMessage('{"type":"rtc-offer","sdp":"v=0"}')).toEqual({
+      type: "rtc-offer",
+      sdp: "v=0",
+    });
+    expect(parseOverlayMessage('{"type":"rtc-close"}')).toEqual({
+      type: "rtc-close",
+    });
+    expect(
+      parseOverlayMessage(
+        '{"type":"rtc-ice","candidate":{"candidate":"c","sdpMid":"0","sdpMLineIndex":0}}',
+      ),
+    ).not.toBeNull();
+    expect(
+      parseOverlayMessage('{"type":"rtc-ice","candidate":{"candidate":5}}'),
+    ).toBeNull();
+    expect(parseOverlayMessage('{"type":"rtc-offer","sdp":7}')).toBeNull();
+  });
+
   it("drops malformed input", () => {
     expect(parseOverlayMessage("not json")).toBeNull();
     expect(

@@ -12,6 +12,7 @@ import { useProfiles } from "@/modules/profiles/store";
 import { SliderField } from "@/modules/studio/components/fields";
 import { PngtuberEditor } from "@/modules/studio/components/PngtuberEditor";
 import { PuppetEditor } from "@/modules/studio/components/PuppetEditor";
+import { VoiceEditor } from "@/modules/studio/components/VoiceEditor";
 import { VrmEditor } from "@/modules/studio/components/VrmEditor";
 
 const signed = (v: number) => `${v > 0 ? "+" : ""}${Math.round(v * 100)}`;
@@ -123,7 +124,7 @@ export function ProfileEditor({ profile, dropHover, onDeleted }: Props) {
         </Button>
       </div>
       <Tabs defaultValue="images" className="min-h-0 flex-1 gap-0">
-        <TabsList className="mx-4 grid grid-cols-2">
+        <TabsList className="mx-4 grid grid-cols-3">
           <TabsTrigger value="images">
             {profile.kind === "pngtuber"
               ? "Images"
@@ -132,6 +133,7 @@ export function ProfileEditor({ profile, dropHover, onDeleted }: Props) {
                 : "Modèle"}
           </TabsTrigger>
           <TabsTrigger value="motion">Mouvement</TabsTrigger>
+          <TabsTrigger value="voice">Voix</TabsTrigger>
         </TabsList>
         <ScrollArea className="min-h-0 flex-1">
           <TabsContent value="images" className="p-4">
@@ -145,6 +147,9 @@ export function ProfileEditor({ profile, dropHover, onDeleted }: Props) {
           </TabsContent>
           <TabsContent value="motion" className="p-4">
             <MotionEditor profile={profile} />
+          </TabsContent>
+          <TabsContent value="voice" className="p-4">
+            <VoiceEditor profile={profile} />
           </TabsContent>
         </ScrollArea>
       </Tabs>

@@ -49,12 +49,40 @@ export const vrmSchema = z.object({
   arms: unit(0, 1.5, 1.2),
 });
 
+export const voiceChangerSchema = z.object({
+  enabled: z.boolean().catch(false).default(false),
+  preset: z.string().max(40).catch("natural").default("natural"),
+  /** Semitones. */
+  pitch: z.number().min(-12).max(12).catch(0).default(0),
+  robot: unit(0, 1, 0),
+  echo: unit(0, 1, 0),
+  reverb: unit(0, 1, 0),
+  radio: unit(0, 1, 0),
+  volume: unit(0, 2, 1),
+});
+
+export const voiceSchema = z.object({
+  /** Null follows the global microphone threshold. */
+  threshold: z
+    .number()
+    .min(0.02)
+    .max(0.95)
+    .nullable()
+    .catch(null)
+    .default(null),
+  mouthGain: unit(0.3, 2, 1),
+  shoutLevel: unit(0.5, 1, 0.85),
+  shoutExpressionId: z.string().nullable().catch(null).default(null),
+  changer: voiceChangerSchema.default(voiceChangerSchema.parse({})),
+});
+
 const base = {
   id: z.string().uuid(),
   name: z.string().min(1).max(60),
   createdAt: z.string(),
   updatedAt: z.string(),
   motion: motionSchema.default(motionSchema.parse({})),
+  voice: voiceSchema.default(voiceSchema.parse({})),
 };
 
 export const profileSchema = z.discriminatedUnion("kind", [
@@ -84,6 +112,8 @@ export type PuppetProfile = Extract<Profile, { kind: "puppet" }>;
 export type VrmConfig = z.infer<typeof vrmSchema>;
 export type VrmProfile = Extract<Profile, { kind: "vrm" }>;
 export type ProfileKind = Profile["kind"];
+export type VoiceConfig = z.infer<typeof voiceSchema>;
+export type VoiceChanger = z.infer<typeof voiceChangerSchema>;
 export type ExpressionSlot = "idle" | "talk" | "blink" | "talkBlink";
 
 export const EXPRESSION_SLOTS: ExpressionSlot[] = [
@@ -107,6 +137,7 @@ export function newProfile(name: string, kind: ProfileKind): Profile {
     createdAt: now,
     updatedAt: now,
     motion: motionSchema.parse({}),
+    voice: voiceSchema.parse({}),
   };
   switch (kind) {
     case "pngtuber":

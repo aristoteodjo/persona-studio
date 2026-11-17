@@ -71,6 +71,16 @@ fn overlay_set_profile(hub: State<'_, Arc<OverlayHub>>, message: String) -> Resu
 }
 
 #[tauri::command]
+fn overlay_clients(hub: State<'_, Arc<OverlayHub>>) -> Vec<u64> {
+    hub.client_ids()
+}
+
+#[tauri::command]
+fn overlay_send(hub: State<'_, Arc<OverlayHub>>, to: u64, message: String) -> Result<(), String> {
+    hub.send_to(to, message)
+}
+
+#[tauri::command]
 fn overlay_push_frame(hub: State<'_, Arc<OverlayHub>>, message: String) -> Result<(), String> {
     hub.push_frame(message)
 }
@@ -100,6 +110,8 @@ pub fn run() {
             overlay_info,
             overlay_set_profile,
             overlay_push_frame,
+            overlay_clients,
+            overlay_send,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Persona Studio");

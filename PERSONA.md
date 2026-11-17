@@ -48,14 +48,17 @@ Persona (profil), Expression, État (repos, parle, cligne, parle + cligne), Pupp
 - Assets MediaPipe (non versionnés) : `pnpm setup:assets` (copie le wasm, télécharge `face_landmarker.task`).
 - Dev : projet Portly `persona-studio`, serveur `app` = `pnpm tauri dev` (Vite sur 1436).
 - **Caméra et micro** : en `tauri dev` lancé par Portly, macOS attribue la demande à Portly, qui n'a pas de `NSCameraUsageDescription`, et refuse en silence. Pour tester la caméra, construire le bundle : `pnpm tauri build --debug --bundles app` puis `open "src-tauri/target/debug/bundle/macos/Persona Studio.app"`.
+- OBS : pour la voix modifiée, cocher « Contrôler l'audio via OBS » sur la source Navigateur.
 - OBS : source Navigateur, URL `http://127.0.0.1:39540/overlay`, 1920x1080 (`?debug=1` affiche l'état de connexion).
 
 ## Ordre de construction
 
 1. Socle, profils 2D et 2.5D, tracking webcam/micro, overlay OBS, raccourcis globaux. **Fait (2026-11-17).**
 2. Modèles 3D VRM (three-vrm, `kind: "vrm"`, chargé à la demande). **Fait (2026-11-17).**
-3. Live2D (Cubism SDK, voir décisions ouvertes).
-4. Placement manuel des repères du visage quand la détection échoue (personnages très stylisés).
+3. Voix : changeur de voix (AudioWorklet de hauteur + effets WebAudio) envoyé à chaque overlay en WebRTC local (signalisation via le WebSocket, hub Rust bidirectionnel avec un id par overlay) ; animation par la voix par persona (seuil, gain de bouche, cri). **Fait (2026-11-17).**
+4. Gestes : bras et mains (MediaPipe Pose/Hand) pour les profils VRM.
+5. Live2D (Cubism SDK, voir décisions ouvertes).
+6. Placement manuel des repères du visage quand la détection échoue (personnages très stylisés).
 
 ## Décisions
 

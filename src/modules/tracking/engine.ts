@@ -1,6 +1,7 @@
 import type { FaceLandmarker } from "@mediapipe/tasks-vision";
 import { create } from "zustand";
 import { pushFrame } from "@/modules/overlay-link";
+import { type VoiceConfig, voiceSchema } from "@/modules/profiles/schema";
 import {
   autoBlink,
   calibrationFrom,
@@ -18,6 +19,9 @@ import {
 } from "@/modules/rig/rig";
 import { getSettings, useSettings } from "@/modules/settings/store";
 import { faceLandmarker } from "@/modules/tracking/vision";
+import { VoiceGraph } from "@/modules/voice/graph";
+import { type ShoutState, updateShout } from "@/modules/voice/presets";
+import { voiceSender } from "@/modules/voice/rtc";
 
 export type DeviceStatus = "off" | "starting" | "on" | "error";
 
@@ -76,6 +80,12 @@ class Engine {
   private analyser: AnalyserNode | null = null;
   private samples: Float32Array<ArrayBuffer> | null = null;
   private talk: TalkState = { talking: false, lastLoud: 0 };
+  private shout: ShoutState = { shouting: false, lastLoud: 0 };
+  private source: MediaStreamAudioSourceNode | null = null;
+  private voiceGraph: VoiceGraph | null = null;
+  private voiceBuilding = false;
+  private voiceCfg: VoiceConfig = voiceSchema.parse({});
+  private monitor = false;
 
   private clock: Worker | null = null;
   private timer = 0;
@@ -171,15 +181,19 @@ class Engine {
         for (const t of stream.getTracks()) t.stop();
         return;
       }
-      const ctx = new AudioContext();
+      const ctx = new AudioContext({ latencyHint: "interactive" });
+      void ctx.resume().catch(() => {});
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 1024;
-      ctx.createMediaStreamSource(stream).connect(analyser);
+      const source = ctx.createMediaStreamSource(stream);
+      source.connect(analyser);
       this.micStream = stream;
       this.audioCtx = ctx;
+      this.source = source;
       this.analyser = analyser;
       this.samples = new Float32Array(analyser.fftSize);
       useTracking.setState({ mic: "on" });
+      this.syncVoice();
     } catch (e) {
       if (token === this.micToken) {
         useTracking.setState({ mic: "error", micError: mediaError(e) });
@@ -188,6 +202,8 @@ class Engine {
   }
 
   stopMic(updateStatus = true) {
+    this.dropVoiceGraph();
+    this.source = null;
     for (const t of this.micStream?.getTracks() ?? []) t.stop();
     this.micStream = null;
     this.audioCtx?.close().catch(() => {});
@@ -199,6 +215,55 @@ class Engine {
       this.micToken++;
       useTracking.setState({ mic: "off", micError: null, level: 0 });
     }
+  }
+
+  /** Voice settings of the active persona plus the global "hear myself" switch. */
+  setVoice(cfg: VoiceConfig, monitor: boolean) {
+    this.voiceCfg = cfg;
+    this.monitor = monitor;
+    this.syncVoice();
+  }
+
+  private syncVoice() {
+    const ctx = this.audioCtx;
+    const source = this.source;
+    const changer = this.voiceCfg.changer;
+    if (!ctx || !source || !changer.enabled) {
+      this.dropVoiceGraph();
+      return;
+    }
+    if (this.voiceGraph) {
+      this.voiceGraph.set(changer);
+      this.voiceGraph.setMonitor(this.monitor);
+      return;
+    }
+    if (this.voiceBuilding) return;
+    this.voiceBuilding = true;
+    VoiceGraph.create(ctx, source)
+      .then((graph) => {
+        this.voiceBuilding = false;
+        // The mic may have restarted or the changer been switched off meanwhile.
+        if (this.audioCtx !== ctx || !this.voiceCfg.changer.enabled) {
+          graph.dispose();
+          this.syncVoice();
+          return;
+        }
+        this.voiceGraph = graph;
+        graph.set(this.voiceCfg.changer);
+        graph.setMonitor(this.monitor);
+        voiceSender.setStream(graph.stream);
+      })
+      .catch((e) => {
+        this.voiceBuilding = false;
+        console.error("voice changer failed", e);
+      });
+  }
+
+  private dropVoiceGraph() {
+    if (!this.voiceGraph) return;
+    voiceSender.setStream(null);
+    this.voiceGraph.dispose();
+    this.voiceGraph = null;
   }
 
   calibrate() {
@@ -252,7 +317,15 @@ class Engine {
       console.error("face tracking failed", e);
     }
     const level = this.readVoice();
-    this.talk = updateTalk(this.talk, level, now, settings.micThreshold);
+    const voice = this.voiceCfg;
+    const threshold = voice.threshold ?? settings.micThreshold;
+    this.talk = updateTalk(this.talk, level, now, threshold);
+    this.shout = updateShout(
+      this.shout,
+      level,
+      now,
+      Math.max(voice.shoutLevel, threshold),
+    );
 
     const s = this.signals;
     if (s && (this.calibrateNext || !settings.calibration)) {
@@ -280,7 +353,9 @@ class Engine {
     }
 
     const faceMouth = hasFace ? target.mouthOpen : 0;
-    const voiceMouth = this.talk.talking ? clamp(0.35 + level * 0.9, 0, 1) : 0;
+    const voiceMouth = this.talk.talking
+      ? clamp((0.35 + level * 0.9) * voice.mouthGain, 0, 1)
+      : 0;
     const src = settings.mouthSource;
     const micOn = this.analyser !== null;
     if (src === "face" || !micOn) {
@@ -292,6 +367,14 @@ class Engine {
     } else {
       target.mouthOpen = Math.max(faceMouth, voiceMouth);
       target.talking = this.talk.talking || faceMouth > 0.3;
+    }
+
+    if (this.shout.shouting && this.analyser) {
+      // Shouting: a chosen 2D expression, or raised brows and a wide mouth on other avatars.
+      if (voice.shoutExpressionId)
+        target.expressionId = voice.shoutExpressionId;
+      target.browUp = Math.max(target.browUp, 0.9);
+      target.mouthOpen = Math.max(target.mouthOpen, 0.9);
     }
 
     latest = smoothFrame(latest, target, settings.smoothing * 160);

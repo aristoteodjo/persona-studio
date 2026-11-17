@@ -3,6 +3,7 @@ import { AvatarStage } from "@/modules/avatar";
 import { parseOverlayMessage } from "@/modules/overlay-link/protocol";
 import type { Profile } from "@/modules/profiles/schema";
 import { idleFrame, type RigFrame } from "@/modules/rig/rig";
+import { VoiceReceiver } from "@/overlay/voice-receiver";
 
 function serverBase(): string {
   const port = new URLSearchParams(location.search).get("port");
@@ -16,6 +17,7 @@ export function OverlayApp() {
   const debug = new URLSearchParams(location.search).has("debug");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [connected, setConnected] = useState(false);
+  const [voiceLive, setVoiceLive] = useState(false);
   const frameRef = useRef<RigFrame>(idleFrame());
   const getFrame = useCallback(() => frameRef.current, []);
 
@@ -24,6 +26,10 @@ export function OverlayApp() {
     let retry = 0;
     let timer = 0;
     let closed = false;
+    const voice = new VoiceReceiver((msg) => {
+      if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+    });
+    voice.onLive = setVoiceLive;
     const connect = () => {
       ws = new WebSocket(`${base.replace(/^http/, "ws")}/ws`);
       ws.onopen = () => {
@@ -35,10 +41,12 @@ export function OverlayApp() {
         const msg = parseOverlayMessage(e.data);
         if (!msg) return;
         if (msg.type === "frame") frameRef.current = msg.frame;
-        else setProfile(msg.profile);
+        else if (msg.type === "profile") setProfile(msg.profile);
+        else void voice.handle(msg);
       };
       ws.onclose = () => {
         setConnected(false);
+        voice.close();
         if (closed) return;
         retry = Math.min(retry + 1, 6);
         timer = window.setTimeout(connect, 250 * 2 ** retry);
@@ -47,6 +55,7 @@ export function OverlayApp() {
     connect();
     return () => {
       closed = true;
+      voice.close();
       window.clearTimeout(timer);
       ws?.close();
     };
@@ -70,8 +79,8 @@ export function OverlayApp() {
             borderRadius: 6,
           }}
         >
-          {connected ? "connecté" : "déconnecté"} ·{" "}
-          {profile?.name ?? "aucun profil"}
+          {connected ? "connecté" : "déconnecté"}
+          {voiceLive ? " · voix" : ""} · {profile?.name ?? "aucun profil"}
         </div>
       ) : null}
     </div>

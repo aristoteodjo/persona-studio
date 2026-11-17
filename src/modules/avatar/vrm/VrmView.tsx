@@ -79,7 +79,9 @@ export default function VrmView({
     // A model may reference external URIs; loading them would leak that the overlay is live.
     const manager = new LoadingManager();
     manager.setURLModifier((u) =>
-      u === url || u.startsWith("data:") || u.startsWith("blob:") ? u : "data:,",
+      u === url || u.startsWith("data:") || u.startsWith("blob:")
+        ? u
+        : "data:,",
     );
     const loader = new GLTFLoader(manager);
     loader.setCrossOrigin("anonymous");

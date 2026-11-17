@@ -21,6 +21,7 @@ export const settingsSchema = z.object({
   mirror: z.boolean().catch(true).default(true),
   smoothing: z.number().min(0).max(1).catch(0.35).default(0.35),
   globalHotkeys: z.boolean().catch(true).default(true),
+  monitorVoice: z.boolean().catch(false).default(false),
   activeProfileId: z.string().nullable().catch(null).default(null),
   calibration: calibrationSchema.nullable().catch(null).default(null),
 });

@@ -10,7 +10,8 @@ import { Stage } from "@/modules/studio/components/Stage";
 import { TopBar } from "@/modules/studio/components/TopBar";
 import { useExpressionHotkeys } from "@/modules/studio/lib/useExpressionHotkeys";
 import { useFileDrop } from "@/modules/studio/lib/files";
-import { setExpression, useTrackingSync } from "@/modules/tracking";
+import { voiceSchema } from "@/modules/profiles/schema";
+import { engine, setExpression, useTrackingSync } from "@/modules/tracking";
 
 export function App() {
   const profiles = useProfiles((s) => s.profiles);
@@ -35,6 +36,12 @@ export function App() {
 
   const active = profiles.find((p) => p.id === activeId) ?? profiles[0] ?? null;
   useExpressionHotkeys(active, globalHotkeys);
+
+  const monitorVoice = useSettings((s) => s.settings.monitorVoice);
+  const activeVoice = active?.voice ?? null;
+  useEffect(() => {
+    engine.setVoice(activeVoice ?? voiceSchema.parse({}), monitorVoice);
+  }, [activeVoice, monitorVoice]);
 
   // The overlay always shows the active profile; re-sent when the server restarts or a client connects.
   useEffect(() => {
