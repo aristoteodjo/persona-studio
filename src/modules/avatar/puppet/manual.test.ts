@@ -3,6 +3,7 @@ import {
   ANCHORS,
   anchorsFrom,
   templateLandmarks,
+  transformAnchors,
   warpLandmarks,
 } from "@/modules/avatar/puppet/manual";
 import { buildPuppetMesh } from "@/modules/avatar/puppet/mesh";
@@ -89,5 +90,20 @@ describe("manual face markers", () => {
     const stacked = ANCHORS.map(() => ({ x: 10, y: 10 }));
     const source = new Array(FACE_LANDMARK_COUNT * 3).fill(0.5);
     expect(warpLandmarks(source, stacked, W, H)).toBeNull();
+  });
+
+  it("moves and scales anchors around their centroid", () => {
+    const pts = [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 10 },
+      { x: 0, y: 10 },
+    ];
+    expect(transformAnchors(pts, { dx: 5, dy: -5, scale: 2 })).toEqual([
+      { x: 0, y: -10 },
+      { x: 20, y: -10 },
+      { x: 20, y: 10 },
+      { x: 0, y: 10 },
+    ]);
   });
 });

@@ -213,3 +213,23 @@ export function warpLandmarks(
   }
   return out;
 }
+
+/** Moves then scales a whole set of anchors around their centroid. */
+export function transformAnchors(
+  points: readonly Px[],
+  { dx = 0, dy = 0, scale = 1 }: { dx?: number; dy?: number; scale?: number },
+): Px[] {
+  if (points.length === 0) return [];
+  let cx = 0;
+  let cy = 0;
+  for (const p of points) {
+    cx += p.x;
+    cy += p.y;
+  }
+  cx /= points.length;
+  cy /= points.length;
+  return points.map((p) => ({
+    x: cx + dx + (p.x - cx) * scale,
+    y: cy + dy + (p.y - cy) * scale,
+  }));
+}

@@ -1,4 +1,4 @@
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import {
   type KeyboardEvent,
   type PointerEvent,
@@ -15,6 +15,7 @@ import {
   anchorsFrom,
   type Px,
   templateLandmarks,
+  transformAnchors,
   warpLandmarks,
 } from "@/modules/avatar/puppet/manual";
 import { mediaBase } from "@/modules/overlay-link";
@@ -30,6 +31,8 @@ const GROUP_FILL: Record<AnchorGroup, string> = {
 };
 
 type Size = { width: number; height: number };
+
+type Drag = { kind: "one"; k: number } | { kind: "all"; start: Px; from: Px[] };
 
 type Props = {
   open: boolean;
@@ -47,7 +50,7 @@ export function FaceMarkerModal({ open, onOpenChange, ...rest }: Props) {
       open={open}
       onOpenChange={onOpenChange}
       title="Placer les repères du visage"
-      description="Glisse chaque point sur le visage du personnage. Les petits points montrent le maillage qui sera animé."
+      description="Cale d'abord tout le visage (glisse hors des points, boutons de taille), puis ajuste chaque point. Les petits points montrent le maillage qui sera animé."
       size="xl"
     >
       {open ? <Editor {...rest} onClose={() => onOpenChange(false)} /> : null}
@@ -71,7 +74,7 @@ function Editor({
   const [anchors, setAnchors] = useState<Px[] | null>(null);
   const [selected, setSelected] = useState(0);
   const svgRef = useRef<SVGSVGElement>(null);
-  const dragging = useRef<number | null>(null);
+  const dragging = useRef<Drag | null>(null);
 
   const source = useMemo(() => {
     if (!size) return null;
@@ -114,15 +117,35 @@ function Editor({
 
   const onPointerDown = (k: number) => (e: PointerEvent<SVGCircleElement>) => {
     e.preventDefault();
+    e.stopPropagation();
     svgRef.current?.setPointerCapture(e.pointerId);
-    dragging.current = k;
+    dragging.current = { kind: "one", k };
     setSelected(k);
   };
+  const onBackgroundDown = (e: PointerEvent<SVGSVGElement>) => {
+    const start = toImage(e);
+    if (!start || !points) return;
+    e.preventDefault();
+    svgRef.current?.setPointerCapture(e.pointerId);
+    dragging.current = { kind: "all", start, from: points };
+  };
   const onPointerMove = (e: PointerEvent<SVGSVGElement>) => {
-    const k = dragging.current;
-    if (k === null) return;
-    const p = toImage(e);
-    if (p) move(k, p);
+    const drag = dragging.current;
+    const p = drag ? toImage(e) : null;
+    if (!drag || !p) return;
+    if (drag.kind === "one") {
+      move(drag.k, p);
+      return;
+    }
+    setAnchors(
+      transformAnchors(drag.from, {
+        dx: p.x - drag.start.x,
+        dy: p.y - drag.start.y,
+      }),
+    );
+  };
+  const scaleAll = (scale: number) => {
+    if (points) setAnchors(transformAnchors(points, { scale }));
   };
   const onPointerUp = (e: PointerEvent<SVGSVGElement>) => {
     dragging.current = null;
@@ -174,7 +197,8 @@ function Editor({
             ref={svgRef}
             viewBox={`0 0 ${size.width} ${size.height}`}
             preserveAspectRatio="xMidYMid meet"
-            className="absolute inset-0 size-full touch-none"
+            className="absolute inset-0 size-full cursor-move touch-none"
+            onPointerDown={onBackgroundDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
@@ -253,6 +277,26 @@ function Editor({
             Certains points se superposent : écarte-les pour continuer.
           </p>
         ) : null}
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            onClick={() => scaleAll(1 / 1.1)}
+            disabled={!points}
+          >
+            <ZoomOut /> Réduire
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            onClick={() => scaleAll(1.1)}
+            disabled={!points}
+          >
+            <ZoomIn /> Agrandir
+          </Button>
+        </div>
         <div className="mt-auto flex flex-wrap gap-2">
           <Button
             variant="ghost"
