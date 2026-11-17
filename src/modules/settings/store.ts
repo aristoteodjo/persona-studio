@@ -19,7 +19,7 @@ export const settingsSchema = z.object({
   micThreshold: z.number().min(0.02).max(0.95).catch(0.35).default(0.35),
   mouthSource: z.enum(["voice", "face", "both"]).catch("both").default("both"),
   mirror: z.boolean().catch(true).default(true),
-  smoothing: z.number().min(0).max(1).catch(0.35).default(0.35),
+  smoothing: z.number().min(0).max(1).catch(0.55).default(0.55),
   globalHotkeys: z.boolean().catch(true).default(true),
   monitorVoice: z.boolean().catch(false).default(false),
   activeProfileId: z.string().nullable().catch(null).default(null),

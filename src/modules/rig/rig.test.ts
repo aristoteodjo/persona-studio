@@ -4,7 +4,10 @@ import {
   autoBlink,
   calibrationFrom,
   faceSignals,
+  HeadFilter,
   headPoseFromLandmarks,
+  minCutoffFor,
+  OneEuro,
   idleFrame,
   NEUTRAL_CALIBRATION,
   rmsToLevel,
@@ -88,13 +91,44 @@ describe("voice", () => {
   });
 });
 
+describe("one euro head filter", () => {
+  it("keeps a still head still despite sensor noise", () => {
+    const f = new OneEuro(minCutoffFor(0.5), 0.6);
+    let maxDev = 0;
+    for (let i = 0; i < 300; i++) {
+      const noise = Math.sin(i * 12.9898) * 0.01;
+      const out = f.filter(0.1 + noise, 33);
+      if (i > 30) maxDev = Math.max(maxDev, Math.abs(out - 0.1));
+    }
+    // Raw noise is +/-0.01 rad; the output must shake far less.
+    expect(maxDev).toBeLessThan(0.004);
+  });
+
+  it("follows a real turn without lagging behind", () => {
+    const f = new OneEuro(minCutoffFor(0.5), 0.6);
+    let out = 0;
+    for (let i = 0; i < 15; i++) out = f.filter(i < 3 ? 0 : 0.5, 33);
+    expect(out).toBeGreaterThan(0.45);
+  });
+
+  it("filters only the head channels", () => {
+    const h = new HeadFilter(0.5);
+    const a = { ...idleFrame(0), yaw: 0 };
+    h.apply(a, 33);
+    const b = { ...idleFrame(33), yaw: 0.02, mouthOpen: 1 };
+    h.apply(b, 33);
+    expect(b.yaw).toBeLessThan(0.02);
+    expect(b.mouthOpen).toBe(1);
+  });
+});
+
 describe("smoothing and blink", () => {
   it("moves toward the target without overshoot", () => {
     const a = idleFrame(0);
-    const b = { ...idleFrame(16), yaw: 1 };
+    const b = { ...idleFrame(16), smile: 1 };
     const s = smoothFrame(a, b, 80);
-    expect(s.yaw).toBeGreaterThan(0);
-    expect(s.yaw).toBeLessThan(1);
+    expect(s.smile).toBeGreaterThan(0);
+    expect(s.smile).toBeLessThan(1);
   });
 
   it("auto blink stays within 0..1 and actually blinks", () => {

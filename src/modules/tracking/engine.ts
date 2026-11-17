@@ -8,6 +8,7 @@ import {
   clamp,
   type FaceSignals,
   faceSignals,
+  HeadFilter,
   idleFrame,
   NEUTRAL_CALIBRATION,
   type RigFrame,
@@ -93,6 +94,7 @@ class Engine {
   private voiceBuilding = false;
   private voiceCfg: VoiceConfig = voiceSchema.parse({});
   private monitor = false;
+  private head = new HeadFilter(0.5);
   private gesturesOn = false;
   private gestureModels: Awaited<ReturnType<typeof gestureLandmarkers>> | null =
     null;
@@ -462,7 +464,9 @@ class Engine {
       target.mouthOpen = Math.max(target.mouthOpen, 0.9);
     }
 
-    latest = smoothFrame(latest, target, settings.smoothing * 160);
+    this.head.setSmoothing(settings.smoothing);
+    this.head.apply(target, now - latest.t);
+    latest = smoothFrame(latest, target, 60 + settings.smoothing * 80);
     // Mouth snaps shut when talking stops so it never lingers half open.
     if (!target.talking && target.mouthOpen === 0) {
       latest.mouthOpen = Math.min(latest.mouthOpen, 0.5);

@@ -202,12 +202,8 @@ export function smoothFactor(dtMs: number, tauMs: number): number {
   return 1 - Math.exp(-Math.max(dtMs, 0) / tauMs);
 }
 
+/** Head pose goes through the One Euro filter instead; this pass handles the face. */
 const SMOOTHED: (keyof RigFrame)[] = [
-  "yaw",
-  "pitch",
-  "roll",
-  "x",
-  "y",
   "mouthOpen",
   "blinkL",
   "blinkR",
@@ -231,6 +227,80 @@ export function smoothFrame(
     (out[key] as number) = a + (b - a) * kk;
   }
   return out;
+}
+
+export const HEAD_KEYS = ["yaw", "pitch", "roll", "x", "y"] as const;
+type HeadKey = (typeof HEAD_KEYS)[number];
+
+/**
+ * One Euro filter (Casiez et al.): the cutoff rises with speed, so a still
+ * head is smoothed hard (no jitter) while fast moves stay responsive (no lag).
+ */
+export class OneEuro {
+  private x: number | null = null;
+  private dx = 0;
+
+  constructor(
+    private minCutoff: number,
+    private beta: number,
+    private dCutoff = 1,
+  ) {}
+
+  setMinCutoff(v: number) {
+    this.minCutoff = v;
+  }
+
+  private static alpha(cutoff: number, dt: number) {
+    const tau = 1 / (2 * Math.PI * cutoff);
+    return 1 / (1 + tau / dt);
+  }
+
+  filter(value: number, dtMs: number): number {
+    if (this.x === null || dtMs <= 0) {
+      this.x = value;
+      return value;
+    }
+    const dt = dtMs / 1000;
+    const rawDx = (value - this.x) / dt;
+    this.dx += (rawDx - this.dx) * OneEuro.alpha(this.dCutoff, dt);
+    const cutoff = this.minCutoff + this.beta * Math.abs(this.dx);
+    this.x += (value - this.x) * OneEuro.alpha(cutoff, dt);
+    return this.x;
+  }
+
+  reset() {
+    this.x = null;
+    this.dx = 0;
+  }
+}
+
+/** Steadiness setting (0 reactive .. 1 very steady) to the filter's resting cutoff in Hz. */
+export const minCutoffFor = (smoothing: number) =>
+  1.5 - Math.min(Math.max(smoothing, 0), 1) * 1.35;
+
+export class HeadFilter {
+  private filters: Record<HeadKey, OneEuro>;
+
+  constructor(smoothing: number) {
+    const c = minCutoffFor(smoothing);
+    this.filters = {
+      yaw: new OneEuro(c, 0.6),
+      pitch: new OneEuro(c, 0.6),
+      roll: new OneEuro(c, 0.6),
+      x: new OneEuro(c, 0.4),
+      y: new OneEuro(c, 0.4),
+    };
+  }
+
+  setSmoothing(smoothing: number) {
+    const c = minCutoffFor(smoothing);
+    for (const f of Object.values(this.filters)) f.setMinCutoff(c);
+  }
+
+  apply(frame: RigFrame, dtMs: number) {
+    for (const k of HEAD_KEYS)
+      frame[k] = this.filters[k].filter(frame[k], dtMs);
+  }
 }
 
 export type TalkState = { talking: boolean; lastLoud: number };
