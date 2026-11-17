@@ -1,4 +1,6 @@
 import { lazy, Suspense } from "react";
+import { mediaUrl } from "@/modules/avatar/layout";
+import { backgroundCss } from "@/modules/avatar/lighting";
 import { PngtuberView } from "@/modules/avatar/PngtuberView";
 import { PuppetView } from "@/modules/avatar/PuppetView";
 import type { Profile } from "@/modules/profiles/schema";
@@ -15,7 +17,28 @@ type Props = {
 };
 
 /** Renders any profile kind; shared by the studio preview and the OBS overlay. */
-export function AvatarStage({ profile, mediaBase, getFrame, onError }: Props) {
+export function AvatarStage(props: Props) {
+  const { profile, mediaBase } = props;
+  const bg = profile.scene.background;
+  const css = backgroundCss(
+    profile.scene,
+    bg.image ? mediaUrl(mediaBase, profile.id, bg.image) : null,
+  );
+  return (
+    <>
+      {css ? (
+        <div
+          aria-hidden
+          className="absolute inset-0"
+          style={{ background: css }}
+        />
+      ) : null}
+      <AvatarView {...props} />
+    </>
+  );
+}
+
+function AvatarView({ profile, mediaBase, getFrame, onError }: Props) {
   switch (profile.kind) {
     case "pngtuber":
       return (

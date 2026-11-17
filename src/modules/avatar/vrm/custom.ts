@@ -12,12 +12,17 @@ import {
   type VrmCustom,
 } from "@/modules/profiles/schema";
 
-type Tintable = Material & { color?: Color; shadeColorFactor?: Color };
+type Tintable = Material & {
+  color?: Color;
+  shadeColorFactor?: Color;
+  map?: unknown;
+};
 type Original = {
   material: Tintable;
   color: Color | null;
   shade: Color | null;
   visible: boolean;
+  textured: boolean;
 };
 
 export type ModelPart = {
@@ -49,11 +54,18 @@ export function collectMaterials(vrm: VRM): Map<string, Original[]> {
         color: m.color?.clone() ?? null,
         shade: m.shadeColorFactor?.clone() ?? null,
         visible: m.visible,
+        textured: Boolean(m.map),
       });
       map.set(key, entry);
     }
   });
   return map;
+}
+
+export function materialsByPart(
+  map: Map<string, Original[]>,
+): Map<string, Material[]> {
+  return new Map([...map].map(([k, list]) => [k, list.map((o) => o.material)]));
 }
 
 export function describeModel(vrm: VRM, map: Map<string, Original[]>) {
@@ -83,14 +95,15 @@ export function applyCustom(
     const cfg = custom.materials[key];
     for (const o of list) {
       o.material.visible = o.visible && !cfg?.hidden;
+      // Textured parts are recolored in their texture (TextureEditor); flat ones by their factor.
+      const flat = cfg?.color && !o.textured ? cfg.color : null;
       if (o.material.color && o.color) {
-        if (cfg?.color) o.material.color.set(cfg.color);
+        if (flat) o.material.color.set(flat);
         else o.material.color.copy(o.color);
       }
       if (o.material.shadeColorFactor && o.shade) {
         o.material.shadeColorFactor.copy(o.shade);
-        if (cfg?.color)
-          o.material.shadeColorFactor.multiply(tint.set(cfg.color));
+        if (flat) o.material.shadeColorFactor.multiply(tint.set(flat));
       }
     }
   }
@@ -98,11 +111,18 @@ export function applyCustom(
 }
 
 /** Weight of the persona's resting mood, merged under the live expressions. */
-export function restExpressions(custom: VrmCustom): Record<string, number> {
+export function restExpressions(
+  custom: VrmCustom,
+  liveMood: string | null = null,
+): Record<string, number> {
+  // A mood picked live (quick action or hotkey) replaces the resting one at full strength.
+  const live = VRM_REST_EXPRESSIONS.find((m) => m === liveMood) ?? null;
+  const mood = live ?? custom.restExpression;
+  const weight = live ? 1 : custom.restWeight;
   const out: Record<string, number> = {};
   for (const name of VRM_REST_EXPRESSIONS) {
     if (name === "neutral") continue;
-    out[name] = name === custom.restExpression ? custom.restWeight : 0;
+    out[name] = name === mood ? weight : 0;
   }
   return out;
 }

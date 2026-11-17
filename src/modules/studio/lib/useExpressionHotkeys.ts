@@ -1,14 +1,12 @@
 import { register, unregisterAll } from "@tauri-apps/plugin-global-shortcut";
 import { useEffect, useRef } from "react";
 import type { Profile } from "@/modules/profiles/schema";
+import { actionForHotkey } from "@/modules/studio/lib/quick-actions";
 import { setExpression } from "@/modules/tracking";
 
 const shortcut = (n: number) => `CommandOrControl+Shift+${n}`;
 
-function expressionFor(profile: Profile | null, n: number): string | null {
-  if (profile?.kind !== "pngtuber") return null;
-  return profile.expressions.find((e) => e.hotkey === n)?.id ?? null;
-}
+const expressionFor = actionForHotkey;
 
 /**
  * Expressions switch with Cmd/Ctrl+Shift+1..9 from anywhere (OBS focused, game

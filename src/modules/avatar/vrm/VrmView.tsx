@@ -16,11 +16,14 @@ import {
 } from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { mediaUrl } from "@/modules/avatar/layout";
+import { LIGHT_RIGS } from "@/modules/avatar/lighting";
 import { applyArms } from "@/modules/avatar/vrm/arms";
+import { TextureEditor } from "@/modules/avatar/vrm/textures";
 import {
   applyCustom,
   collectMaterials,
   describeModel,
+  materialsByPart,
   restExpressions,
   useVrmModelInfo,
 } from "@/modules/avatar/vrm/custom";
@@ -56,8 +59,16 @@ export default function VrmView({
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [status, setStatus] = useState<Status>("loading");
-  const settingsRef = useRef({ motion: profile.motion, vrm: profile.vrm });
-  settingsRef.current = { motion: profile.motion, vrm: profile.vrm };
+  const settingsRef = useRef({
+    motion: profile.motion,
+    vrm: profile.vrm,
+    scene: profile.scene,
+  });
+  settingsRef.current = {
+    motion: profile.motion,
+    vrm: profile.vrm,
+    scene: profile.scene,
+  };
   const profileId = profile.id;
   const url = profile.vrm.model
     ? mediaUrl(mediaBase, profile.id, profile.vrm.model)
@@ -71,6 +82,7 @@ export default function VrmView({
     let vrm: VRM | null = null;
     let materials: ReturnType<typeof collectMaterials> | null = null;
     let appliedCustom = "";
+    let textures: TextureEditor | null = null;
     setStatus("loading");
 
     const renderer = new WebGLRenderer({
@@ -81,9 +93,29 @@ export default function VrmView({
     renderer.setClearColor(0x000000, 0);
     const scene = new Scene();
     const camera = new PerspectiveCamera(FOV, 1, 0.05, 50);
-    const key = new DirectionalLight(0xffffff, Math.PI * 0.55);
-    key.position.set(0.6, 1.2, 1.5);
-    scene.add(key, new HemisphereLight(0xffffff, 0x404050, 0.35));
+    const key = new DirectionalLight();
+    const fill = new DirectionalLight();
+    const sky = new HemisphereLight();
+    scene.add(key, fill, sky);
+    let litKey = "";
+    const relight = () => {
+      const { scene: look } = settingsRef.current;
+      const k = `${look.lighting}:${look.light}`;
+      if (k === litKey) return;
+      litKey = k;
+      const rig = LIGHT_RIGS[look.lighting];
+      for (const [light, cfg] of [
+        [key, rig.key],
+        [fill, rig.fill],
+      ] as const) {
+        light.color.setHex(cfg.color);
+        light.intensity = Math.PI * cfg.intensity * look.light;
+        light.position.set(...cfg.position);
+      }
+      sky.color.setHex(rig.sky);
+      sky.groundColor.setHex(rig.ground);
+      sky.intensity = rig.ambient * look.light;
+    };
 
     // A model may reference external URIs; loading them would leak that the overlay is live.
     const manager = new LoadingManager();
@@ -119,6 +151,7 @@ export default function VrmView({
           ?.getWorldPosition(headPos);
         vrm = loaded;
         materials = collectMaterials(loaded);
+        textures = new TextureEditor(materialsByPart(materials));
         useVrmModelInfo.setState({
           profileId,
           ...describeModel(loaded, materials),
@@ -149,6 +182,7 @@ export default function VrmView({
         camera.aspect = w / h;
         camera.updateProjectionMatrix();
       }
+      relight();
       const { motion, vrm: cfg } = settingsRef.current;
       const visible = FRAME_HEIGHT / motion.scale;
       const dist = visible / 2 / Math.tan((FOV * Math.PI) / 360);
@@ -164,6 +198,9 @@ export default function VrmView({
         const customKey = JSON.stringify(cfg.custom);
         if (materials && customKey !== appliedCustom) {
           applyCustom(vrm, materials, cfg.custom);
+          void textures
+            ?.apply(cfg.custom)
+            .catch((e) => console.warn("texture edit failed", e));
           appliedCustom = customKey;
         }
         const frame = getFrame();
@@ -178,7 +215,10 @@ export default function VrmView({
         applyArms(vrm, frame.arms, cfg, dt);
         const em = vrm.expressionManager;
         if (em) {
-          const merged: Record<string, number> = restExpressions(cfg.custom);
+          const merged: Record<string, number> = restExpressions(
+            cfg.custom,
+            frame.expressionId,
+          );
           for (const [name, weight] of Object.entries(pose.expressions)) {
             merged[name] = Math.max(merged[name] ?? 0, weight);
           }
@@ -195,6 +235,7 @@ export default function VrmView({
     return () => {
       disposed = true;
       cancelAnimationFrame(raf);
+      textures?.dispose();
       if (vrm) {
         scene.remove(vrm.scene);
         VRMUtils.deepDispose(vrm.scene);

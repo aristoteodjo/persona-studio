@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { AvatarStage } from "@/modules/avatar";
+import { activeAction, quickActions } from "@/modules/studio/lib/quick-actions";
 import { mediaBase, useOverlayInfo } from "@/modules/overlay-link";
 import type { Profile } from "@/modules/profiles/schema";
 import { useSettings } from "@/modules/settings/store";
@@ -99,9 +100,8 @@ export function Stage({ profile }: { profile: Profile | null }) {
   const base = overlay.port ? mediaBase() : "";
   const { settings, set } = useSettings();
   const t = useTracking();
-  const expressions = profile?.kind === "pngtuber" ? profile.expressions : [];
-  const activeExpr =
-    expressions.find((e) => e.id === t.expressionId)?.id ?? expressions[0]?.id;
+  const actions = quickActions(profile);
+  const live = activeAction(actions, t.expressionId);
 
   return (
     <section aria-label="Aperçu" className="flex min-w-0 flex-1 flex-col">
@@ -176,32 +176,53 @@ export function Stage({ profile }: { profile: Profile | null }) {
           label={settings.micEnabled ? "Couper le micro" : "Activer le micro"}
         />
         <LevelMeter />
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => engine.calibrate()}
-          disabled={!t.face}
-          className="ml-1"
-        >
-          <Crosshair /> Recentrer
-        </Button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => engine.calibrate()}
+                disabled={!t.face}
+                className="ml-1"
+              />
+            }
+          >
+            <Crosshair /> Recentrer
+          </TooltipTrigger>
+
+          <TooltipContent>
+            Ta position actuelle devient la position neutre de l'avatar
+          </TooltipContent>
+        </Tooltip>
 
         <div className="ml-auto flex min-w-0 items-center gap-1 overflow-x-auto">
-          {expressions.map((e) => (
-            <Button
-              key={e.id}
-              size="sm"
-              variant={e.id === activeExpr ? "default" : "secondary"}
-              onClick={() => setExpression(e.id)}
-              aria-pressed={e.id === activeExpr}
-            >
-              {e.hotkey ? (
-                <kbd className="rounded bg-background/30 px-1 font-mono text-[10px]">
-                  {e.hotkey}
-                </kbd>
-              ) : null}
-              {e.name}
-            </Button>
+          {actions.map((a) => (
+            <Tooltip key={a.id}>
+              <TooltipTrigger
+                render={
+                  <Button
+                    size="sm"
+                    variant={a.id === live ? "default" : "secondary"}
+                    onClick={() => setExpression(a.id)}
+                    aria-pressed={a.id === live}
+                  />
+                }
+              >
+                {a.hotkey ? (
+                  <kbd className="rounded bg-background/30 px-1 font-mono text-[10px]">
+                    {a.hotkey}
+                  </kbd>
+                ) : null}
+                {a.label}
+              </TooltipTrigger>
+              <TooltipContent>
+                {a.hint}
+                {a.hotkey
+                  ? ` · touche ${a.hotkey}, ou Cmd + Maj + ${a.hotkey} depuis OBS`
+                  : ""}
+              </TooltipContent>
+            </Tooltip>
           ))}
         </div>
         <span className="w-14 shrink-0 text-right font-mono text-[11px] text-muted-foreground tabular-nums">

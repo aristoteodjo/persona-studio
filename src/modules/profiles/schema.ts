@@ -51,14 +51,33 @@ export const VRM_REST_EXPRESSIONS = [
   "surprised",
 ] as const;
 
+export const PATTERNS = [
+  "stripes",
+  "dots",
+  "checks",
+  "stars",
+  "hearts",
+  "zigzag",
+] as const;
+
+export const patternSchema = z.object({
+  type: z.enum(PATTERNS),
+  color: hexColor.catch("#ffffff").default("#ffffff"),
+  scale: unit(0.2, 4, 1),
+  angle: z.number().min(-90).max(90).catch(0).default(0),
+  opacity: unit(0, 1, 0.8),
+});
+
 /** In-app tweaks layered over the model, keyed by material name so they survive re-exports. */
 export const vrmCustomSchema = z.object({
   materials: z
     .record(
       z.string().max(200),
       z.object({
+        /** Target color: the texture is recolored toward it, shading kept. */
         color: hexColor.nullable().catch(null).default(null),
         hidden: z.boolean().catch(false).default(false),
+        pattern: patternSchema.nullable().catch(null).default(null),
       }),
     )
     .catch({})
@@ -112,6 +131,31 @@ export const voiceSchema = z.object({
   changer: voiceChangerSchema.default(voiceChangerSchema.parse({})),
 });
 
+export const LIGHTINGS = ["studio", "soft", "sunset", "neon", "night"] as const;
+
+export const sceneSchema = z.object({
+  background: z
+    .object({
+      kind: z
+        .enum(["none", "color", "gradient", "image"])
+        .catch("none")
+        .default("none"),
+      color: hexColor.catch("#1b1b2f").default("#1b1b2f"),
+      color2: hexColor.catch("#e86a33").default("#e86a33"),
+      angle: z.number().min(0).max(360).catch(160).default(160),
+      image: z.string().min(1).nullable().catch(null).default(null),
+    })
+    .default({
+      kind: "none",
+      color: "#1b1b2f",
+      color2: "#e86a33",
+      angle: 160,
+      image: null,
+    }),
+  lighting: z.enum(LIGHTINGS).catch("studio").default("studio"),
+  light: unit(0.3, 2, 1),
+});
+
 const base = {
   id: z.string().uuid(),
   name: z.string().min(1).max(60),
@@ -119,6 +163,7 @@ const base = {
   updatedAt: z.string(),
   motion: motionSchema.default(motionSchema.parse({})),
   voice: voiceSchema.default(voiceSchema.parse({})),
+  scene: sceneSchema.default(sceneSchema.parse({})),
 };
 
 export const profileSchema = z.discriminatedUnion("kind", [
@@ -147,6 +192,9 @@ export type PngtuberProfile = Extract<Profile, { kind: "pngtuber" }>;
 export type PuppetProfile = Extract<Profile, { kind: "puppet" }>;
 export type VrmConfig = z.infer<typeof vrmSchema>;
 export type VrmCustom = z.infer<typeof vrmCustomSchema>;
+export type Pattern = z.infer<typeof patternSchema>;
+export type PatternType = Pattern["type"];
+export type Scene = z.infer<typeof sceneSchema>;
 export type VrmProfile = Extract<Profile, { kind: "vrm" }>;
 export type ProfileKind = Profile["kind"];
 export type VoiceConfig = z.infer<typeof voiceSchema>;
@@ -175,6 +223,7 @@ export function newProfile(name: string, kind: ProfileKind): Profile {
     updatedAt: now,
     motion: motionSchema.parse({}),
     voice: voiceSchema.parse({}),
+    scene: sceneSchema.parse({}),
   };
   switch (kind) {
     case "pngtuber":
@@ -194,6 +243,7 @@ export function referencedMedia(profile: Profile): string[] {
       : profile.kind === "puppet"
         ? [profile.puppet.image]
         : [profile.vrm.model];
+  files.push(profile.scene.background.image);
   return [...new Set(files.filter((f): f is string => f !== null))];
 }
 
