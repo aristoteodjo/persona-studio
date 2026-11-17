@@ -2,6 +2,8 @@ import { Box, Loader2, Upload } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { VrmCustomizer } from "@/modules/studio/components/VrmCustomizer";
+import { VroidSync } from "@/modules/studio/components/VroidSync";
 import type { VrmConfig, VrmProfile } from "@/modules/profiles/schema";
 import { useProfiles } from "@/modules/profiles/store";
 import {
@@ -136,6 +138,8 @@ export function VrmEditor({ profile, dropHover }: Props) {
           l'exporter en .vrm.
         </p>
       )}
+      <VroidSync profile={profile} patch={patch} />
+      {vrm.model ? <VrmCustomizer profile={profile} patch={patch} /> : null}
     </div>
   );
 }

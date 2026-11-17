@@ -57,8 +57,9 @@ Persona (profil), Expression, État (repos, parle, cligne, parle + cligne), Pupp
 2. Modèles 3D VRM (three-vrm, `kind: "vrm"`, chargé à la demande). **Fait (2026-11-17).**
 3. Voix : changeur de voix (AudioWorklet de hauteur + effets WebAudio) envoyé à chaque overlay en WebRTC local (signalisation via le WebSocket, hub Rust bidirectionnel avec un id par overlay) ; animation par la voix par persona (seuil, gain de bouche, cri). **Fait (2026-11-17).**
 4. Gestes VRM : bras (MediaPipe Pose lite, world landmarks) et doigts (Hand Landmarker, flexion par doigt), ~15 Hz, seulement si un profil VRM a `gestures` actif ; `rig/gestures.ts` (pur, testé) puis `avatar/vrm/arms.ts` (slerp vers la pose, retour au repos hors champ). **Fait (2026-11-17).**
-5. Live2D (Cubism SDK, voir décisions ouvertes).
-6. Placement manuel des repères du visage quand la détection échoue (personnages très stylisés).
+5. VRoid : synchro d'un export .vrm (`watch.rs`, polling 1,5 s, réimport quand la taille est stable) et personnalisation dans l'app (`vrm.custom` : teinte/masquage par nom de matériau, taille de tête, humeur au repos). **Fait (2026-11-17).**
+6. Live2D (Cubism SDK, voir décisions ouvertes).
+7. Placement manuel des repères du visage quand la détection échoue (personnages très stylisés).
 
 ## Décisions
 
@@ -77,4 +78,6 @@ Persona (profil), Expression, État (repos, parle, cligne, parle + cligne), Pupp
 
 - Biome prend `gl.useProgram` pour un hook : règle désactivée seulement pour `avatar/puppet/renderer.ts`.
 - `tauri build` échoue si le bundle est en cours d'exécution : quitter l'app avant de reconstruire.
+- Gestes : la profondeur MediaPipe est bruitée (amortie x0,5), hystérésis de visibilité 0,75/0,45, zone morte de 2,5 degrés ; ne pas retirer ces garde-fous sans retester à la webcam.
+- Le premier `tauri build` après une modification renvoie parfois 1 alors que le second passe : relancer avant de conclure à une erreur.
 - Le port Vite 1420 est déjà pris dans Portly par un autre projet ; on utilise 1436/1437.

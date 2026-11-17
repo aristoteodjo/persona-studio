@@ -1,6 +1,7 @@
 mod overlay;
 mod pack;
 mod profiles;
+mod watch;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -71,6 +72,27 @@ fn overlay_set_profile(hub: State<'_, Arc<OverlayHub>>, message: String) -> Resu
 }
 
 #[tauri::command]
+fn model_watch(
+    app: tauri::AppHandle,
+    dir: State<'_, ProfilesDir>,
+    watcher: State<'_, watch::ModelWatch>,
+    id: String,
+    source: Option<String>,
+) -> Result<(), String> {
+    watcher.watch(app, dir.0.clone(), id, source.map(PathBuf::from))
+}
+
+#[tauri::command]
+fn vroid_open() -> bool {
+    watch::open_vroid()
+}
+
+#[tauri::command]
+fn vroid_download_page() {
+    watch::open_vroid_download();
+}
+
+#[tauri::command]
 fn overlay_clients(hub: State<'_, Arc<OverlayHub>>) -> Vec<u64> {
     hub.client_ids()
 }
@@ -98,6 +120,7 @@ pub fn run() {
             let key = overlay::load_or_create_key(&data_dir.join("overlay.key"))?;
             let hub = Arc::new(OverlayHub::new(key));
             app.manage(ProfilesDir(root.clone()));
+            app.manage(watch::ModelWatch::default());
             app.manage(hub.clone());
             tauri::async_runtime::spawn(overlay::start(app.handle().clone(), hub, root));
             Ok(())
@@ -113,6 +136,9 @@ pub fn run() {
             overlay_set_profile,
             overlay_push_frame,
             overlay_clients,
+            model_watch,
+            vroid_open,
+            vroid_download_page,
             overlay_send,
         ])
         .run(tauri::generate_context!())

@@ -8,6 +8,7 @@ import {
   quatForMetaVersion,
   quatFromUnitVectors,
   rotateInverse,
+  smoothArms,
 } from "@/modules/rig/gestures";
 
 const lm = (x: number, y: number, z = 0, visibility = 1): Landmark => ({
@@ -132,6 +133,42 @@ describe("fingers", () => {
 
   it("returns null for an incomplete hand", () => {
     expect(fingerCurls([lm(0, 0)])).toBeNull();
+  });
+});
+
+describe("stability", () => {
+  const arm = (x: number, y: number) => ({
+    upper: [x, y, 0] as [number, number, number],
+    lower: [x, y, 0] as [number, number, number],
+    curl: null,
+  });
+
+  it("holds an arm through small jitter and follows real moves", () => {
+    const still = { left: arm(0, -1), right: null };
+    const jitter = { left: arm(0.02, -0.9998), right: null };
+    expect(smoothArms(still, jitter, 33)?.left?.upper).toEqual(
+      still.left.upper,
+    );
+    const moved = smoothArms(still, { left: arm(1, 0), right: null }, 33);
+    expect(moved?.left?.upper[0]).toBeGreaterThan(0.05);
+    expect(moved?.left?.upper[0]).toBeLessThan(1);
+  });
+
+  it("needs a clear view to start tracking but keeps a tracked arm through dips", () => {
+    const dim = pose({ 13: lm(0.2, -0.1, 0, 0.6), 15: lm(0.2, 0.2, 0, 0.6) });
+    expect(armsFromPose(dim, false).left).toBeNull();
+    expect(
+      armsFromPose(dim, false, { left: true, right: false }).left,
+    ).not.toBeNull();
+  });
+
+  it("never lets a forearm fold straight through the body", () => {
+    const inward = armRotations(
+      { upper: [1, 0, 0], lower: [-1, 0, 0], curl: null },
+      "left",
+    );
+    // Unclamped this would be a 180 degree fold (w = 0).
+    expect(Math.abs(inward.lower[3])).toBeGreaterThan(0.3);
   });
 });
 

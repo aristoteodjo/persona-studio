@@ -29,7 +29,14 @@ const POSE = {
   rightWrist: 16,
 } as const;
 
-const MIN_VISIBILITY = 0.6;
+/** Hysteresis: an arm must be clearly visible to start tracking, and lost to stop. */
+const ENTER_VISIBILITY = 0.75;
+const STAY_VISIBILITY = 0.45;
+/** Monocular depth is the noisiest axis; damping it keeps arms from flailing toward the camera. */
+const DEPTH_SCALE = 0.5;
+/** How far an arm may cross the body's midline (unit direction X), so it never goes through the torso. */
+const MAX_UPPER_INWARD = 0.25;
+const MAX_LOWER_INWARD = 0.45;
 
 const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -75,7 +82,7 @@ export function rotateInverse(q: Quat, v: Vec3): Vec3 {
 
 /** Pose world landmarks (image-aligned, meters) to avatar space. */
 function toAvatar(p: Landmark, mirror: boolean): Vec3 {
-  return [mirror ? -p.x : p.x, -p.y, -p.z];
+  return [mirror ? -p.x : p.x, -p.y, -p.z * DEPTH_SCALE];
 }
 
 function side(
@@ -84,15 +91,14 @@ function side(
   elbow: number,
   wrist: number,
   mirror: boolean,
+  tracked: boolean,
 ): Omit<ArmSide, "curl"> | null {
   const s = lm[shoulder];
   const e = lm[elbow];
   const w = lm[wrist];
   if (!s || !e || !w) return null;
-  if (
-    (e.visibility ?? 0) < MIN_VISIBILITY ||
-    (w.visibility ?? 0) < MIN_VISIBILITY
-  ) {
+  const min = tracked ? STAY_VISIBILITY : ENTER_VISIBILITY;
+  if ((e.visibility ?? 0) < min || (w.visibility ?? 0) < min) {
     return null;
   }
   const upper = normalize(sub(toAvatar(e, mirror), toAvatar(s, mirror)));
@@ -107,13 +113,17 @@ function side(
 export function armsFromPose(
   world: readonly Landmark[],
   mirror: boolean,
+  tracked: { left: boolean; right: boolean } = { left: false, right: false },
 ): { left: Omit<ArmSide, "curl"> | null; right: Omit<ArmSide, "curl"> | null } {
+  // With a mirrored view the subject's right arm drives the avatar's left one.
+  const rightIsLeft = mirror;
   const subjectRight = side(
     world,
     POSE.rightShoulder,
     POSE.rightElbow,
     POSE.rightWrist,
     mirror,
+    rightIsLeft ? tracked.left : tracked.right,
   );
   const subjectLeft = side(
     world,
@@ -121,6 +131,7 @@ export function armsFromPose(
     POSE.leftElbow,
     POSE.leftWrist,
     mirror,
+    rightIsLeft ? tracked.right : tracked.left,
   );
   return mirror
     ? { left: subjectRight, right: subjectLeft }
@@ -178,14 +189,81 @@ export type ArmRotations = { upper: Quat; lower: Quat };
  * Normalized VRM bones rest in T-pose: the avatar's left arm points to +X,
  * its right arm to -X. The forearm rotation is relative to the upper arm.
  */
+/** Keeps a direction from crossing the midline further than `limit` (outward is +X for the left arm). */
+function limitInward(v: Vec3, which: "left" | "right", limit: number): Vec3 {
+  const outward = which === "left" ? v[0] : -v[0];
+  if (outward >= -limit) return v;
+  const x = which === "left" ? -limit : limit;
+  // Keep the inward part bounded and give the rest of the length to Y/Z;
+  // a direction pointing straight inward falls back to hanging down.
+  const rest = Math.sqrt(1 - limit * limit);
+  const yz = Math.hypot(v[1], v[2]);
+  return yz < 1e-3
+    ? [x, -rest, 0]
+    : [x, (v[1] / yz) * rest, (v[2] / yz) * rest];
+}
+
 export function armRotations(
   arm: ArmSide,
   which: "left" | "right",
 ): ArmRotations {
   const rest: Vec3 = which === "left" ? [1, 0, 0] : [-1, 0, 0];
-  const upper = quatFromUnitVectors(rest, arm.upper);
-  const local = normalize(rotateInverse(upper, arm.lower)) ?? rest;
+  const upper = quatFromUnitVectors(
+    rest,
+    limitInward(arm.upper, which, MAX_UPPER_INWARD),
+  );
+  const lowerDir = limitInward(arm.lower, which, MAX_LOWER_INWARD);
+  const local = normalize(rotateInverse(upper, lowerDir)) ?? rest;
   return { upper, lower: quatFromUnitVectors(rest, local) };
+}
+
+/** Below this change (about 2.5 degrees) a direction is treated as noise and held. */
+const DEADZONE_COS = 0.999;
+
+function smoothDir(prev: Vec3, next: Vec3, k: number): Vec3 {
+  if (dot(prev, next) > DEADZONE_COS) return prev;
+  return (
+    normalize([
+      prev[0] + (next[0] - prev[0]) * k,
+      prev[1] + (next[1] - prev[1]) * k,
+      prev[2] + (next[2] - prev[2]) * k,
+    ]) ?? next
+  );
+}
+
+function smoothSide(
+  prev: ArmSide | null,
+  next: ArmSide | null,
+  k: number,
+): ArmSide | null {
+  if (!next || !prev) return next;
+  const curl =
+    next.curl && prev.curl
+      ? (next.curl.map((c, i) => {
+          const p = prev.curl?.[i] ?? c;
+          return Math.abs(c - p) < 0.04 ? p : p + (c - p) * k;
+        }) as ArmSide["curl"])
+      : next.curl;
+  return {
+    upper: smoothDir(prev.upper, next.upper, k),
+    lower: smoothDir(prev.lower, next.lower, k),
+    curl,
+  };
+}
+
+/** Frame-rate independent low-pass with a dead zone, so a still arm stays still. */
+export function smoothArms(
+  prev: ArmPose | null,
+  next: ArmPose | null,
+  dtMs: number,
+  tauMs = 140,
+): ArmPose | null {
+  if (!next) return null;
+  const k = 1 - Math.exp(-Math.max(dtMs, 0) / tauMs);
+  return {
+    left: smoothSide(prev?.left ?? null, next.left, k),
+    right: smoothSide(prev?.right ?? null, next.right, k),
+  };
 }
 
 /** three-vrm turns VRM 0.x models 180 degrees around Y, which flips X and Z. */

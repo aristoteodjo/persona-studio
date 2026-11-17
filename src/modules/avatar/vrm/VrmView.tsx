@@ -17,6 +17,13 @@ import {
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { mediaUrl } from "@/modules/avatar/layout";
 import { applyArms } from "@/modules/avatar/vrm/arms";
+import {
+  applyCustom,
+  collectMaterials,
+  describeModel,
+  restExpressions,
+  useVrmModelInfo,
+} from "@/modules/avatar/vrm/custom";
 import { forMetaVersion, vrmPose } from "@/modules/avatar/vrm/pose";
 import type { VrmProfile } from "@/modules/profiles/schema";
 import type { RigFrame } from "@/modules/rig/rig";
@@ -51,6 +58,7 @@ export default function VrmView({
   const [status, setStatus] = useState<Status>("loading");
   const settingsRef = useRef({ motion: profile.motion, vrm: profile.vrm });
   settingsRef.current = { motion: profile.motion, vrm: profile.vrm };
+  const profileId = profile.id;
   const url = profile.vrm.model
     ? mediaUrl(mediaBase, profile.id, profile.vrm.model)
     : null;
@@ -61,6 +69,8 @@ export default function VrmView({
     let disposed = false;
     let raf = 0;
     let vrm: VRM | null = null;
+    let materials: ReturnType<typeof collectMaterials> | null = null;
+    let appliedCustom = "";
     setStatus("loading");
 
     const renderer = new WebGLRenderer({
@@ -108,6 +118,11 @@ export default function VrmView({
           .getNormalizedBoneNode("head")
           ?.getWorldPosition(headPos);
         vrm = loaded;
+        materials = collectMaterials(loaded);
+        useVrmModelInfo.setState({
+          profileId,
+          ...describeModel(loaded, materials),
+        });
         setStatus("ready");
       })
       .catch((e: unknown) => {
@@ -146,6 +161,11 @@ export default function VrmView({
       camera.lookAt(target);
 
       if (vrm) {
+        const customKey = JSON.stringify(cfg.custom);
+        if (materials && customKey !== appliedCustom) {
+          applyCustom(vrm, materials, cfg.custom);
+          appliedCustom = customKey;
+        }
         const frame = getFrame();
         const pose = vrmPose(frame, cfg, motion, now);
         const version = vrm.meta.metaVersion === "0" ? "0" : "1";
@@ -158,7 +178,11 @@ export default function VrmView({
         applyArms(vrm, frame.arms, cfg, dt);
         const em = vrm.expressionManager;
         if (em) {
+          const merged: Record<string, number> = restExpressions(cfg.custom);
           for (const [name, weight] of Object.entries(pose.expressions)) {
+            merged[name] = Math.max(merged[name] ?? 0, weight);
+          }
+          for (const [name, weight] of Object.entries(merged)) {
             if (em.getExpression(name)) em.setValue(name, weight);
           }
         }
@@ -177,7 +201,7 @@ export default function VrmView({
       }
       renderer.dispose();
     };
-  }, [url, getFrame, onError]);
+  }, [url, profileId, getFrame, onError]);
 
   return (
     <>

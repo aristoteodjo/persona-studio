@@ -23,6 +23,7 @@ import {
   armsFromPose,
   avatarWrists,
   fingerCurls,
+  smoothArms,
 } from "@/modules/rig/gestures";
 import { faceLandmarker, gestureLandmarkers } from "@/modules/tracking/vision";
 import { VoiceGraph } from "@/modules/voice/graph";
@@ -308,7 +309,10 @@ class Engine {
       this.arms = null;
       return;
     }
-    const sides = armsFromPose(world, mirror);
+    const sides = armsFromPose(world, mirror, {
+      left: this.arms?.left != null,
+      right: this.arms?.right != null,
+    });
     const wrists = avatarWrists(image, mirror);
     const curls: Record<"left" | "right", ReturnType<typeof fingerCurls>> = {
       left: null,
@@ -327,10 +331,14 @@ class Engine {
       const key = dl <= dr ? "left" : "right";
       if (Math.min(dl, dr) < 0.15) curls[key] = fingerCurls(handWorld);
     });
-    this.arms = {
-      left: sides.left ? { ...sides.left, curl: curls.left } : null,
-      right: sides.right ? { ...sides.right, curl: curls.right } : null,
-    };
+    this.arms = smoothArms(
+      this.arms,
+      {
+        left: sides.left ? { ...sides.left, curl: curls.left } : null,
+        right: sides.right ? { ...sides.right, curl: curls.right } : null,
+      },
+      now - this.armsAt,
+    );
     this.armsAt = now;
   }
 

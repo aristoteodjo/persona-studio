@@ -1,4 +1,7 @@
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { pushProfile, useOverlayInfo } from "@/modules/overlay-link";
 import { useProfiles } from "@/modules/profiles/store";
 import { useSettings } from "@/modules/settings/store";
@@ -47,6 +50,32 @@ export function App() {
   useEffect(() => {
     engine.setGestures(gestures);
   }, [gestures]);
+
+  // A persona linked to a VRoid export is re-imported whenever that file changes.
+  const watchId = active?.kind === "vrm" ? active.id : null;
+  const watchSource = active?.kind === "vrm" ? active.vrm.source : null;
+  useEffect(() => {
+    invoke("model_watch", {
+      id: watchId ?? "",
+      source: watchId ? watchSource : null,
+    }).catch((e) => console.warn("model watch failed", e));
+  }, [watchId, watchSource]);
+
+  useEffect(() => {
+    const off = listen<{ id: string; file: string }>("model://updated", (e) => {
+      const { id, file } = e.payload;
+      if (typeof file !== "string" || !file.endsWith(".vrm")) return;
+      useProfiles
+        .getState()
+        .update(id, (p) =>
+          p.kind === "vrm" ? { ...p, vrm: { ...p.vrm, model: file } } : p,
+        );
+      toast.success("Avatar mis à jour depuis VRoid Studio");
+    });
+    return () => {
+      void off.then((f) => f());
+    };
+  }, []);
 
   // The overlay always shows the active profile; re-sent when the server restarts or a client connects.
   useEffect(() => {

@@ -40,6 +40,37 @@ export const puppetSchema = z.object({
   brows: unit(0, 2, 1),
 });
 
+const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+
+export const VRM_REST_EXPRESSIONS = [
+  "neutral",
+  "happy",
+  "relaxed",
+  "angry",
+  "sad",
+  "surprised",
+] as const;
+
+/** In-app tweaks layered over the model, keyed by material name so they survive re-exports. */
+export const vrmCustomSchema = z.object({
+  materials: z
+    .record(
+      z.string().max(200),
+      z.object({
+        color: hexColor.nullable().catch(null).default(null),
+        hidden: z.boolean().catch(false).default(false),
+      }),
+    )
+    .catch({})
+    .default({}),
+  headScale: unit(0.8, 1.3, 1),
+  restExpression: z
+    .enum(VRM_REST_EXPRESSIONS)
+    .catch("neutral")
+    .default("neutral"),
+  restWeight: unit(0, 1, 0.5),
+});
+
 export const vrmSchema = z.object({
   model: mediaName,
   mouth: unit(0, 2, 1),
@@ -49,6 +80,9 @@ export const vrmSchema = z.object({
   arms: unit(0, 1.5, 1.2),
   /** Arms and fingers follow the camera when the hands are visible. */
   gestures: z.boolean().catch(true).default(true),
+  /** Absolute path of a VRoid Studio export kept in sync with this persona. */
+  source: z.string().max(1024).nullable().catch(null).default(null),
+  custom: vrmCustomSchema.default(vrmCustomSchema.parse({})),
 });
 
 export const voiceChangerSchema = z.object({
@@ -112,6 +146,7 @@ export type Profile = z.infer<typeof profileSchema>;
 export type PngtuberProfile = Extract<Profile, { kind: "pngtuber" }>;
 export type PuppetProfile = Extract<Profile, { kind: "puppet" }>;
 export type VrmConfig = z.infer<typeof vrmSchema>;
+export type VrmCustom = z.infer<typeof vrmCustomSchema>;
 export type VrmProfile = Extract<Profile, { kind: "vrm" }>;
 export type ProfileKind = Profile["kind"];
 export type VoiceConfig = z.infer<typeof voiceSchema>;
