@@ -11,12 +11,16 @@ import { idleFrame } from "@/modules/rig/rig";
 const full = expressionSchema.parse({
   id: "a",
   name: "A",
-  idle: "i",
-  talk: "t",
-  blink: "b",
-  talkBlink: "tb",
+  idle: "0b5f9a3e-1c2d-4e5f-8a9b-0c1d2e3f4a01.png",
+  talk: "0b5f9a3e-1c2d-4e5f-8a9b-0c1d2e3f4a02.png",
+  blink: "0b5f9a3e-1c2d-4e5f-8a9b-0c1d2e3f4a03.png",
+  talkBlink: "0b5f9a3e-1c2d-4e5f-8a9b-0c1d2e3f4a04.png",
 });
-const idleOnly = expressionSchema.parse({ id: "b", name: "B", idle: "i" });
+const idleOnly = expressionSchema.parse({
+  id: "b",
+  name: "B",
+  idle: "0b5f9a3e-1c2d-4e5f-8a9b-0c1d2e3f4a01.png",
+});
 
 describe("pickSlot", () => {
   it("uses the exact slot when present", () => {

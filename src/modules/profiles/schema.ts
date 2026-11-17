@@ -12,7 +12,11 @@ export const motionSchema = z.object({
   breath: unit(0, 2, 1),
 });
 
-const mediaName = z.string().min(1).nullable().default(null);
+/** Media names are produced by the import (`<uuid>.<ext>`); anything else is rejected,
+ * since profiles also arrive from the overlay socket and end up in URLs and CSS. */
+export const MEDIA_NAME =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(png|jpg|webp|gif|vrm)$/;
+const mediaName = z.string().regex(MEDIA_NAME).nullable().default(null);
 
 export const expressionSchema = z.object({
   id: z.string().min(1),
@@ -143,7 +147,7 @@ export const sceneSchema = z.object({
       color: hexColor.catch("#1b1b2f").default("#1b1b2f"),
       color2: hexColor.catch("#e86a33").default("#e86a33"),
       angle: z.number().min(0).max(360).catch(160).default(160),
-      image: z.string().min(1).nullable().catch(null).default(null),
+      image: z.string().regex(MEDIA_NAME).nullable().catch(null).default(null),
     })
     .default({
       kind: "none",

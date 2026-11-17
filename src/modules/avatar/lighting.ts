@@ -75,7 +75,7 @@ export function backgroundCss(
       return `linear-gradient(${b.angle}deg, ${b.color}, ${b.color2})`;
     case "image":
       return imageUrl
-        ? `center / cover no-repeat url("${imageUrl}"), ${b.color}`
+        ? `center / cover no-repeat url("${encodeURI(imageUrl).replace(/["\\]/g, "")}"), ${b.color}`
         : b.color;
   }
 }
