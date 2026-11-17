@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   DirectionalLight,
   HemisphereLight,
+  LoadingManager,
   PerspectiveCamera,
   Scene,
   Vector3,
@@ -75,7 +76,12 @@ export default function VrmView({
     key.position.set(0.6, 1.2, 1.5);
     scene.add(key, new HemisphereLight(0xffffff, 0x404050, 0.35));
 
-    const loader = new GLTFLoader();
+    // A model may reference external URIs; loading them would leak that the overlay is live.
+    const manager = new LoadingManager();
+    manager.setURLModifier((u) =>
+      u === url || u.startsWith("data:") || u.startsWith("blob:") ? u : "data:,",
+    );
+    const loader = new GLTFLoader(manager);
     loader.setCrossOrigin("anonymous");
     loader.register((parser) => new VRMLoaderPlugin(parser));
 
