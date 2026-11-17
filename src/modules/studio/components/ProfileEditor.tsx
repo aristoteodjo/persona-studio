@@ -154,7 +154,11 @@ export function ProfileEditor({
             ) : profile.kind === "puppet" ? (
               <PuppetEditor profile={profile} dropHover={dropHover} />
             ) : profile.kind === "vrm" ? (
-              <VrmEditor profile={profile} dropHover={dropHover} />
+              <VrmEditor
+                profile={profile}
+                dropHover={dropHover}
+                onOpenAtelier={() => onOpenAtelier(profile.id)}
+              />
             ) : profile.kind === "live2d" ? (
               <Live2dEditor profile={profile} dropHover={dropHover} />
             ) : (

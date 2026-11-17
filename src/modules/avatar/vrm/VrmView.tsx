@@ -17,6 +17,7 @@ import {
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { mediaUrl } from "@/modules/avatar/layout";
 import { LIGHT_RIGS } from "@/modules/avatar/lighting";
+import { type OrbitView, orbitCamera } from "@/modules/avatar/orbit";
 import { applyArms } from "@/modules/avatar/vrm/arms";
 import { TextureEditor } from "@/modules/avatar/vrm/textures";
 import {
@@ -36,6 +37,8 @@ type Props = {
   mediaBase: string;
   getFrame: () => RigFrame;
   onError?: (message: string) => void;
+  /** Atelier camera; without it the persona framing (motion) is used. */
+  view?: { current: OrbitView };
 };
 
 const BONES = [
@@ -56,6 +59,7 @@ export default function VrmView({
   mediaBase,
   getFrame,
   onError,
+  view,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [status, setStatus] = useState<Status>("loading");
@@ -184,15 +188,23 @@ export default function VrmView({
       }
       relight();
       const { motion, vrm: cfg } = settingsRef.current;
-      const visible = FRAME_HEIGHT / motion.scale;
-      const dist = visible / 2 / Math.tan((FOV * Math.PI) / 360);
-      const target = new Vector3(
-        headPos.x - motion.offsetX * visible * camera.aspect * 0.5,
-        headPos.y - 0.2 + motion.offsetY * visible * 0.5,
-        headPos.z,
-      );
-      camera.position.set(target.x, target.y, target.z + dist);
-      camera.lookAt(target);
+      const orbit = view?.current;
+      if (orbit) {
+        if (orbit.spin) orbit.yaw += 0.006;
+        const c = orbitCamera(orbit, headPos.y + 0.06, FOV);
+        camera.position.set(...c.position);
+        camera.lookAt(...c.target);
+      } else {
+        const visible = FRAME_HEIGHT / motion.scale;
+        const dist = visible / 2 / Math.tan((FOV * Math.PI) / 360);
+        const target = new Vector3(
+          headPos.x - motion.offsetX * visible * camera.aspect * 0.5,
+          headPos.y - 0.2 + motion.offsetY * visible * 0.5,
+          headPos.z,
+        );
+        camera.position.set(target.x, target.y, target.z + dist);
+        camera.lookAt(target);
+      }
 
       if (vrm) {
         const customKey = JSON.stringify(cfg.custom);
@@ -242,7 +254,7 @@ export default function VrmView({
       }
       renderer.dispose();
     };
-  }, [url, profileId, getFrame, onError]);
+  }, [url, profileId, getFrame, onError, view]);
 
   return (
     <>

@@ -29,25 +29,9 @@ import {
   type Part,
 } from "@/modules/avatar/creator/spec";
 import { LIGHT_RIGS } from "@/modules/avatar/lighting";
+import { type OrbitView, orbitCamera } from "@/modules/avatar/orbit";
 import type { CreatorProfile } from "@/modules/profiles/schema";
 import type { RigFrame } from "@/modules/rig/rig";
-
-export type Framing = "face" | "bust" | "body";
-
-/** Free camera used by the Atelier; read every frame, never through React. */
-export type OrbitView = {
-  yaw: number;
-  zoom: number;
-  framing: Framing;
-  spin: boolean;
-};
-
-/** Height framed and point looked at, per framing. */
-const FRAMINGS: Record<Framing, { height: number; y: number }> = {
-  face: { height: 0.6, y: 1.43 },
-  bust: { height: 0.95, y: 1.22 },
-  body: { height: 1.85, y: 0.86 },
-};
 
 type Props = {
   profile: CreatorProfile;
@@ -224,17 +208,10 @@ export default function CreatorView({ profile, getFrame, view }: Props) {
       const { motion, creator } = profileRef.current;
       const orbit = view?.current;
       if (orbit) {
-        const f = FRAMINGS[orbit.framing];
-        const visible = f.height / orbit.zoom;
-        const dist = visible / 2 / Math.tan((FOV * Math.PI) / 360);
         if (orbit.spin) orbit.yaw += 0.006;
-        const y = orbit.framing === "face" ? focus.y : f.y;
-        camera.position.set(
-          Math.sin(orbit.yaw) * dist,
-          y,
-          Math.cos(orbit.yaw) * dist,
-        );
-        camera.lookAt(0, y, 0);
+        const c = orbitCamera(orbit, focus.y, FOV);
+        camera.position.set(...c.position);
+        camera.lookAt(...c.target);
       } else {
         const visible = FRAME_HEIGHT / motion.scale;
         const dist = visible / 2 / Math.tan((FOV * Math.PI) / 360);

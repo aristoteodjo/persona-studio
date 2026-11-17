@@ -78,9 +78,24 @@ export function describeModel(vrm: VRM, map: Map<string, Original[]>) {
       color: base ? `#${base.getHexString()}` : "#ffffff",
     };
   });
-  const expressions =
-    vrm.expressionManager?.expressions.map((e) => e.expressionName) ?? [];
-  return { parts, expressions };
+  return {
+    parts: numberDuplicates(parts),
+    expressions:
+      vrm.expressionManager?.expressions.map((e) => e.expressionName) ?? [],
+  };
+}
+
+/** VRoid splits some parts (shoes, socks) into materials that clean to the same label. */
+export function numberDuplicates<T extends { label: string }>(parts: T[]): T[] {
+  const total = new Map<string, number>();
+  for (const p of parts) total.set(p.label, (total.get(p.label) ?? 0) + 1);
+  const seen = new Map<string, number>();
+  return parts.map((p) => {
+    if ((total.get(p.label) ?? 0) < 2) return p;
+    const n = (seen.get(p.label) ?? 0) + 1;
+    seen.set(p.label, n);
+    return { ...p, label: `${p.label} ${n}` };
+  });
 }
 
 const tint = new Color();

@@ -1,4 +1,5 @@
-import { Box, Loader2, Upload } from "lucide-react";
+import { Box, Loader2, Palette, Upload } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
@@ -18,9 +19,13 @@ import {
 
 export const VRM_DROP_ID = "vrm:model";
 
-type Props = { profile: VrmProfile; dropHover: string | null };
+type Props = {
+  profile: VrmProfile;
+  dropHover: string | null;
+  onOpenAtelier?: () => void;
+};
 
-export function VrmEditor({ profile, dropHover }: Props) {
+export function VrmEditor({ profile, dropHover, onOpenAtelier }: Props) {
   const update = useProfiles((s) => s.update);
   const { vrm } = profile;
   const patch = (next: Partial<VrmConfig>) =>
@@ -139,6 +144,11 @@ export function VrmEditor({ profile, dropHover }: Props) {
         </p>
       )}
       <VroidSync profile={profile} patch={patch} />
+      {vrm.model && onOpenAtelier ? (
+        <Button size="sm" className="self-start" onClick={onOpenAtelier}>
+          <Palette /> Retoucher dans l'Atelier
+        </Button>
+      ) : null}
       {vrm.model ? <VrmCustomizer profile={profile} patch={patch} /> : null}
     </div>
   );

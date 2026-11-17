@@ -23,6 +23,7 @@ import {
   type VrmCustom,
   type VrmProfile,
 } from "@/modules/profiles/schema";
+import { useProfiles } from "@/modules/profiles/store";
 import { SliderField } from "@/modules/studio/components/fields";
 import { MOOD_LABEL } from "@/modules/studio/lib/quick-actions";
 
@@ -35,8 +36,12 @@ const PATTERN_LABEL: Record<PatternType, string> = {
   zigzag: "Zigzag",
 };
 
-type PartCfg = VrmCustom["materials"][string];
-const EMPTY: PartCfg = { color: null, hidden: false, pattern: null };
+export type PartCfg = VrmCustom["materials"][string];
+export const EMPTY_PART: PartCfg = {
+  color: null,
+  hidden: false,
+  pattern: null,
+};
 
 function Swatch({ pattern }: { pattern: Pattern }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -57,7 +62,7 @@ function Swatch({ pattern }: { pattern: Pattern }) {
   );
 }
 
-function PartRow({
+export function PartRow({
   part,
   cfg,
   onChange,
@@ -209,7 +214,7 @@ export function VrmCustomizer({ profile, patch }: Props) {
   const setCustom = (next: Partial<VrmCustom>) =>
     patch({ custom: { ...custom, ...next } });
   const setPart = (key: string, next: Partial<PartCfg>) => {
-    const prev = custom.materials[key] ?? EMPTY;
+    const prev = custom.materials[key] ?? EMPTY_PART;
     setCustom({
       materials: { ...custom.materials, [key]: { ...prev, ...next } },
     });
@@ -242,6 +247,50 @@ export function VrmCustomizer({ profile, patch }: Props) {
           <RotateCcw /> Tout réinitialiser
         </Button>
       </div>
+      <VrmGeneralFields custom={custom} setCustom={setCustom} />
+      {groups.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Les parties du modèle apparaissent une fois l'avatar chargé dans
+          l'aperçu.
+        </p>
+      ) : (
+        <>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            La couleur recolore la texture en gardant ses ombres. Le bouton
+            étincelle ajoute un motif.
+          </p>
+          {groups.map(({ g, items }) => (
+            <div key={g} className="flex flex-col gap-2">
+              <h4 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                {GROUP_LABEL[g]}
+              </h4>
+              <ul className="flex flex-col gap-1.5">
+                {items.map((p) => (
+                  <PartRow
+                    key={p.key}
+                    part={p}
+                    cfg={custom.materials[p.key] ?? EMPTY_PART}
+                    onChange={(next) => setPart(p.key, next)}
+                  />
+                ))}
+              </ul>
+            </div>
+          ))}
+        </>
+      )}
+    </section>
+  );
+}
+
+export function VrmGeneralFields({
+  custom,
+  setCustom,
+}: {
+  custom: VrmCustom;
+  setCustom: (next: Partial<VrmCustom>) => void;
+}) {
+  return (
+    <>
       <div className="flex items-center justify-between gap-4">
         <Label>Humeur au repos</Label>
         <Select
@@ -284,36 +333,34 @@ export function VrmCustomizer({ profile, patch }: Props) {
         max={1.3}
         onChange={(headScale) => setCustom({ headScale })}
       />
-      {groups.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          Les parties du modèle apparaissent une fois l'avatar chargé dans
-          l'aperçu.
-        </p>
-      ) : (
-        <>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            La couleur recolore la texture en gardant ses ombres. Le bouton
-            étincelle ajoute un motif.
-          </p>
-          {groups.map(({ g, items }) => (
-            <div key={g} className="flex flex-col gap-2">
-              <h4 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-                {GROUP_LABEL[g]}
-              </h4>
-              <ul className="flex flex-col gap-1.5">
-                {items.map((p) => (
-                  <PartRow
-                    key={p.key}
-                    part={p}
-                    cfg={custom.materials[p.key] ?? EMPTY}
-                    onChange={(next) => setPart(p.key, next)}
-                  />
-                ))}
-              </ul>
-            </div>
-          ))}
-        </>
-      )}
-    </section>
+    </>
   );
+}
+
+/** Customization of a VRM persona from anywhere (side panel or Atelier). */
+export function useVrmCustom(profile: VrmProfile) {
+  const update = useProfiles((st) => st.update);
+  const setCustom = (next: Partial<VrmCustom>) =>
+    update(profile.id, (p) =>
+      p.kind === "vrm"
+        ? { ...p, vrm: { ...p.vrm, custom: { ...p.vrm.custom, ...next } } }
+        : p,
+    );
+  const setPart = (key: string, next: Partial<PartCfg>) =>
+    update(profile.id, (p) => {
+      if (p.kind !== "vrm") return p;
+      const materials = p.vrm.custom.materials;
+      const prev = materials[key] ?? EMPTY_PART;
+      return {
+        ...p,
+        vrm: {
+          ...p.vrm,
+          custom: {
+            ...p.vrm.custom,
+            materials: { ...materials, [key]: { ...prev, ...next } },
+          },
+        },
+      };
+    });
+  return { custom: profile.vrm.custom, setCustom, setPart };
 }
