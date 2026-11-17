@@ -16,6 +16,15 @@ export async function pickModel(): Promise<string | null> {
   return typeof picked === "string" ? picked : null;
 }
 
+export async function pickLive2d(): Promise<string | null> {
+  const picked = await open({
+    multiple: false,
+    directory: false,
+    filters: [{ name: "Modèle Live2D (.model3.json)", extensions: ["json"] }],
+  });
+  return typeof picked === "string" ? picked : null;
+}
+
 export async function pickImage(): Promise<string | null> {
   const picked = await open({
     multiple: false,

@@ -34,6 +34,7 @@ pub fn image_ext_mime(ext: &str) -> Option<&'static str> {
         "webp" => Some("image/webp"),
         "gif" => Some("image/gif"),
         "vrm" => Some("model/gltf-binary"),
+        "zip" => Some("application/zip"),
         _ => None,
     }
 }
@@ -176,6 +177,7 @@ mod tests {
     fn media_names_must_be_uuid_and_image_ext() {
         assert!(is_valid_media_name(&format!("{ID}.png")));
         assert!(!is_valid_media_name(&format!("{ID}.svg")));
+        assert!(is_valid_media_name(&format!("{ID}.zip")));
         assert!(!is_valid_media_name("profile.json"));
         assert!(!is_valid_media_name("../x.png"));
         assert!(media_path(Path::new("/r"), ID, "profile.json").is_none());

@@ -8,3 +8,4 @@ account.md
 .env
 .DS_Store
 *.log
+public/static/live2d

@@ -15,7 +15,7 @@ export const motionSchema = z.object({
 /** Media names are produced by the import (`<uuid>.<ext>`); anything else is rejected,
  * since profiles also arrive from the overlay socket and end up in URLs and CSS. */
 export const MEDIA_NAME =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(png|jpg|webp|gif|vrm)$/;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(png|jpg|webp|gif|vrm|zip)$/;
 const mediaName = z.string().regex(MEDIA_NAME).nullable().default(null);
 
 export const expressionSchema = z.object({
@@ -108,6 +108,17 @@ export const vrmSchema = z.object({
   custom: vrmCustomSchema.default(vrmCustomSchema.parse({})),
 });
 
+/** A Live2D (Cubism 3+) model, packed by the import into one zip with its settings. */
+export const live2dSchema = z.object({
+  model: mediaName,
+  mouth: unit(0, 2, 1),
+  eyes: unit(0, 2, 1),
+  /** Body sway following the head. */
+  body: unit(0, 2, 1),
+  /** Plays the model's own idle motions (hair, breathing) under the tracking. */
+  idleMotion: z.boolean().catch(true).default(true),
+});
+
 export const voiceChangerSchema = z.object({
   enabled: z.boolean().catch(false).default(false),
   preset: z.string().max(40).catch("natural").default("natural"),
@@ -186,6 +197,11 @@ export const profileSchema = z.discriminatedUnion("kind", [
     kind: z.literal("vrm"),
     vrm: vrmSchema,
   }),
+  z.object({
+    ...base,
+    kind: z.literal("live2d"),
+    live2d: live2dSchema,
+  }),
 ]);
 
 export type Motion = z.infer<typeof motionSchema>;
@@ -200,6 +216,8 @@ export type Pattern = z.infer<typeof patternSchema>;
 export type PatternType = Pattern["type"];
 export type Scene = z.infer<typeof sceneSchema>;
 export type VrmProfile = Extract<Profile, { kind: "vrm" }>;
+export type Live2dConfig = z.infer<typeof live2dSchema>;
+export type Live2dProfile = Extract<Profile, { kind: "live2d" }>;
 export type ProfileKind = Profile["kind"];
 export type VoiceConfig = z.infer<typeof voiceSchema>;
 export type VoiceChanger = z.infer<typeof voiceChangerSchema>;
@@ -236,6 +254,8 @@ export function newProfile(name: string, kind: ProfileKind): Profile {
       return { ...common, kind, puppet: puppetSchema.parse({}) };
     case "vrm":
       return { ...common, kind, vrm: vrmSchema.parse({}) };
+    case "live2d":
+      return { ...common, kind, live2d: live2dSchema.parse({}) };
   }
 }
 
@@ -246,14 +266,16 @@ export function referencedMedia(profile: Profile): string[] {
       ? profile.expressions.flatMap((e) => EXPRESSION_SLOTS.map((s) => e[s]))
       : profile.kind === "puppet"
         ? [profile.puppet.image]
-        : [profile.vrm.model];
+        : profile.kind === "vrm"
+          ? [profile.vrm.model]
+          : [profile.live2d.model];
   files.push(profile.scene.background.image);
   return [...new Set(files.filter((f): f is string => f !== null))];
 }
 
 export function coverImage(profile: Profile): string | null {
   if (profile.kind === "puppet") return profile.puppet.image;
-  if (profile.kind === "vrm") return null;
+  if (profile.kind === "vrm" || profile.kind === "live2d") return null;
   for (const e of profile.expressions) if (e.idle) return e.idle;
   return null;
 }

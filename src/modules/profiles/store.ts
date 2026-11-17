@@ -40,6 +40,7 @@ type ProfilesState = {
   update: (id: string, recipe: (p: Profile) => Profile) => void;
   remove: (id: string) => Promise<void>;
   importImage: (id: string, sourcePath: string) => Promise<string>;
+  importLive2d: (id: string, model3Path: string) => Promise<string>;
 };
 
 export const useProfiles = create<ProfilesState>((set, get) => ({
@@ -101,4 +102,6 @@ export const useProfiles = create<ProfilesState>((set, get) => ({
   },
   importImage: (id, sourcePath) =>
     invoke<string>("profile_import_image", { id, source: sourcePath }),
+  importLive2d: (id, model3Path) =>
+    invoke<string>("profile_import_live2d", { id, source: model3Path }),
 }));

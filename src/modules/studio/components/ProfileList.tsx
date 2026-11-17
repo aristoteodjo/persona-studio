@@ -1,4 +1,4 @@
-import { Box, ImageIcon, Plus, ScanFace } from "lucide-react";
+import { Box, ImageIcon, Plus, ScanFace, Sparkles } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -28,6 +28,7 @@ export const KIND_LABEL: Record<ProfileKind, string> = {
   pngtuber: "2D",
   puppet: "2.5D",
   vrm: "3D",
+  live2d: "Live2D",
 };
 
 const KINDS: {
@@ -53,6 +54,12 @@ const KINDS: {
     title: "3D · Modèle VRM",
     text: "Un avatar 3D au format .vrm (VRoid Studio, Booth). Tête, buste, yeux, bouche et cheveux animés.",
     icon: Box,
+  },
+  {
+    kind: "live2d",
+    title: "Live2D · Modèle Cubism",
+    text: "Un modèle Live2D (.model3.json, Cubism 3 et plus). Tête, corps, yeux, bouche et physique des cheveux.",
+    icon: Sparkles,
   },
 ];
 
@@ -178,7 +185,7 @@ export function ProfileList({ profiles, activeId, onSelect }: Props) {
               placeholder="Ex. Kira"
             />
           </div>
-          <fieldset className="grid grid-cols-3 gap-2">
+          <fieldset className="grid grid-cols-2 gap-2">
             <legend className="mb-2 text-sm font-medium">Type d'avatar</legend>
             {KINDS.map((k) => (
               <label

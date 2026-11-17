@@ -1,3 +1,4 @@
+mod live2d;
 mod overlay;
 mod pack;
 mod profiles;
@@ -39,6 +40,18 @@ async fn profile_import_image(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn profile_import_live2d(
+    dir: State<'_, ProfilesDir>,
+    id: String,
+    source: String,
+) -> Result<String, String> {
+    let root = dir.0.clone();
+    tauri::async_runtime::spawn_blocking(move || live2d::import(&root, &id, &PathBuf::from(source)))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -130,6 +143,7 @@ pub fn run() {
             profile_save,
             profile_delete,
             profile_import_image,
+            profile_import_live2d,
             profile_prune_media,
             pack_scan,
             overlay_info,

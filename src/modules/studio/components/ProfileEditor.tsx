@@ -14,6 +14,7 @@ import { PngtuberEditor } from "@/modules/studio/components/PngtuberEditor";
 import { PuppetEditor } from "@/modules/studio/components/PuppetEditor";
 import { SceneEditor } from "@/modules/studio/components/SceneEditor";
 import { VoiceEditor } from "@/modules/studio/components/VoiceEditor";
+import { Live2dEditor } from "@/modules/studio/components/Live2dEditor";
 import { VrmEditor } from "@/modules/studio/components/VrmEditor";
 
 const signed = (v: number) => `${v > 0 ? "+" : ""}${Math.round(v * 100)}`;
@@ -143,8 +144,10 @@ export function ProfileEditor({ profile, dropHover, onDeleted }: Props) {
               <PngtuberEditor profile={profile} dropHover={dropHover} />
             ) : profile.kind === "puppet" ? (
               <PuppetEditor profile={profile} dropHover={dropHover} />
-            ) : (
+            ) : profile.kind === "vrm" ? (
               <VrmEditor profile={profile} dropHover={dropHover} />
+            ) : (
+              <Live2dEditor profile={profile} dropHover={dropHover} />
             )}
           </TabsContent>
           <TabsContent value="motion" className="p-4">

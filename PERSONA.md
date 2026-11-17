@@ -30,6 +30,8 @@ Vérifier avant de dire fini (via `portly temp` / `portly wait`) : `pnpm check-t
 - `modules/tracking` : moteur unique (caméra + MediaPipe Face Landmarker VIDEO + micro WebAudio), horloge dans un Web Worker (WebKit ralentit les timers de la page quand la fenêtre n'est pas au premier plan).
 - `modules/avatar` : `AvatarStage` partagé studio/overlay. 2D = PNGTuber (expressions × états repos/parle/cligne/parle+cligne, images empilées, visibilité basculée en rAF). 2.5D = puppet (468 landmarks détectés une fois à l'import, maillage Delaunay landmarks + grille, trou de bouche, déformation pure puis WebGL1).
 - `modules/avatar/vrm` : `pose.ts` (pur, testé) convertit la rig frame en rotations d'os normalisés (cou/tête/buste, bras baissés) et poids d'expressions VRM (`aa`, `blinkLeft/Right`, `happy`, `surprised`). Les modèles VRM 0.x sont tournés de 180° par `rotateVRM0`, d'où l'inversion X/Z (`forMetaVersion`). `VrmView` (three.js) est importé en lazy : un profil 2D ne charge jamais three.
+- `modules/avatar/live2d` : `params.ts` (pur, testé) convertit la rig frame en paramètres Cubism standard (`ParamAngleX`... ; AngleY et AngleZ de signe opposé à pitch et roll). `Live2DView` (pixi.js 7 + `pixi-live2d-display-lipsyncpatch`, lazy) charge le Cubism Core depuis `/static/live2d/` puis le plugin (qui exige le core à son évaluation), décompresse le zip en blobs et écrit les paramètres sur `afterMotionUpdate` (avant physique ; clignement auto du modèle désactivé).
+- Rust `live2d.rs` : l'import d'un `.model3.json` copie seulement les fichiers référencés (chemins relatifs, sans `..`, restés dans le dossier, `.moc3` vérifié par magic `MOC3`, sons retirés) dans un zip `<uuid>.zip` avec `model.model3.json` à la racine.
 - `modules/profiles` : schéma zod (union discriminée sur `kind`), store zustand, sauvegarde différée 350 ms ; le nettoyage des médias orphelins se fait seulement au chargement.
 
 ## Glossaire
@@ -46,6 +48,7 @@ Persona (profil), Expression, État (repos, parle, cligne, parle + cligne), Pupp
 ## Commandes
 
 - Assets MediaPipe (non versionnés) : `pnpm setup:assets` (copie le wasm, télécharge `face_landmarker.task`).
+- Cubism Core (non versionné) : télécharger « Cubism SDK for Web » sur live2d.com, puis `pnpm setup:live2d <zip>` (copie vers `public/static/live2d/`).
 - Dev : projet Portly `persona-studio`, serveur `app` = `pnpm tauri dev` (Vite sur 1436). Le shell de Portly ne charge ni nvm ni asdf : la commande du serveur préfixe `PATH` (nvm, `~/.asdf/shims`, `~/.cargo/bin`), et `portly temp` reçoit `--env "PATH=$PATH"`.
 - **Caméra et micro** : en `tauri dev` lancé par Portly, macOS attribue la demande à Portly, qui n'a pas de `NSCameraUsageDescription`, et refuse en silence. Pour tester la caméra, construire le bundle : `pnpm tauri build --debug --bundles app` puis `open "src-tauri/target/debug/bundle/macos/Persona Studio.app"`.
 - OBS : pour la voix modifiée, cocher « Contrôler l'audio via OBS » sur la source Navigateur.
@@ -60,7 +63,7 @@ Persona (profil), Expression, État (repos, parle, cligne, parle + cligne), Pupp
 5. VRoid : synchro d'un export .vrm (`watch.rs`, polling 1,5 s, réimport quand la taille est stable) et personnalisation dans l'app (`vrm.custom` : teinte/masquage par nom de matériau, taille de tête, humeur au repos). **Fait (2026-11-17).**
 6. Atelier 1 : recoloration de texture qui garde les ombres (`avatar/vrm/recolor.ts`, pur), motifs par partie (`patterns.ts`, `TextureEditor` recalcule depuis la texture d'origine), décor pour tous les avatars (`scene.background`) et ambiances lumineuses 3D (`avatar/lighting.ts`), actions rapides d'humeur VRM (touches 1 à 6). **Fait (2026-11-17).**
 7. Atelier 2 (créateur type VRoid, avec nos propres assets) : à cadrer, voir décisions ouvertes.
-8. Live2D (Cubism SDK, voir décisions ouvertes).
+8. Live2D : profil `kind: "live2d"`, import d'un `.model3.json`, suivi tête/corps/yeux/bouche/sourcils, physique et mouvements de repos du modèle. **Code fait (2026-11-17), rendu à valider avec un vrai modèle** (Cubism Core requis : `pnpm setup:live2d <zip du SDK>`).
 9. Placement manuel des repères du visage quand la détection échoue (personnages très stylisés) : 19 repères posés à la main (`avatar/puppet/manual.ts`, pur, testé), les 468 points suivent par plaque mince depuis le visage canonique MediaPipe (`canonical-face.ts`) ou depuis la détection existante pour l'ajuster. **Code fait (2026-11-17), validation dans l'app à faire.**
 
 ## Décisions
@@ -68,10 +71,10 @@ Persona (profil), Expression, État (repos, parle, cligne, parle + cligne), Pupp
 ### Prises
 - 2026-11-17 : Tauri 2 desktop, overlay OBS par Browser Source locale (pas de caméra virtuelle).
 - 2026-11-17 : tracking MediaPipe embarqué dans l'app (hors ligne).
+- 2026-11-17 : Live2D accepté (licence Cubism propriétaire). Le Cubism Core n'est jamais versionné : chaque poste l'installe depuis le SDK téléchargé à la main (`pnpm setup:live2d`).
 
 ### Ouvertes
 - Nom définitif du produit (« Persona Studio » provisoire) et identifiant de bundle.
-- Live2D : le Cubism SDK est propriétaire (licence gratuite sous un seuil de chiffre d'affaires) ; valider avant d'intégrer.
 - Signature et notarisation macOS pour la distribution.
 
 ## Pièges connus
