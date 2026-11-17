@@ -14,6 +14,7 @@ import { PngtuberEditor } from "@/modules/studio/components/PngtuberEditor";
 import { PuppetEditor } from "@/modules/studio/components/PuppetEditor";
 import { SceneEditor } from "@/modules/studio/components/SceneEditor";
 import { VoiceEditor } from "@/modules/studio/components/VoiceEditor";
+import { CreatorEditor } from "@/modules/studio/components/CreatorEditor";
 import { Live2dEditor } from "@/modules/studio/components/Live2dEditor";
 import { VrmEditor } from "@/modules/studio/components/VrmEditor";
 
@@ -132,7 +133,9 @@ export function ProfileEditor({ profile, dropHover, onDeleted }: Props) {
               ? "Images"
               : profile.kind === "puppet"
                 ? "Visage"
-                : "Modèle"}
+                : profile.kind === "creator"
+                  ? "Créateur"
+                  : "Modèle"}
           </TabsTrigger>
           <TabsTrigger value="motion">Mouvement</TabsTrigger>
           <TabsTrigger value="voice">Voix</TabsTrigger>
@@ -146,8 +149,10 @@ export function ProfileEditor({ profile, dropHover, onDeleted }: Props) {
               <PuppetEditor profile={profile} dropHover={dropHover} />
             ) : profile.kind === "vrm" ? (
               <VrmEditor profile={profile} dropHover={dropHover} />
-            ) : (
+            ) : profile.kind === "live2d" ? (
               <Live2dEditor profile={profile} dropHover={dropHover} />
+            ) : (
+              <CreatorEditor profile={profile} />
             )}
           </TabsContent>
           <TabsContent value="motion" className="p-4">

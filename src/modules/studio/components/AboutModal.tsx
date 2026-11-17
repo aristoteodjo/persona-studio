@@ -8,6 +8,10 @@ const LICENSES = [
   ["React", "MIT"],
   ["Base UI, shadcn/ui", "MIT"],
   ["Delaunator", "ISC"],
+  ["three.js, three-vrm", "MIT"],
+  ["PixiJS, pixi-live2d-display", "MIT"],
+  ["Live2D Cubism Core", "Live2D Proprietary"],
+  ["fflate", "MIT"],
   ["Lucide", "ISC"],
   ["Inter, Space Grotesk", "OFL-1.1"],
 ] as const;

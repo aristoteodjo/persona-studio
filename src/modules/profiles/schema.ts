@@ -119,6 +119,58 @@ export const live2dSchema = z.object({
   idleMotion: z.boolean().catch(true).default(true),
 });
 
+export const CREATOR_HAIR = [
+  "short",
+  "bob",
+  "long",
+  "twintails",
+  "ponytail",
+  "spiky",
+] as const;
+export const CREATOR_EYES = ["round", "sharp", "sleepy"] as const;
+export const CREATOR_OUTFITS = ["hoodie", "tee", "sailor", "jacket"] as const;
+export const CREATOR_ACCESSORIES = [
+  "catEars",
+  "glasses",
+  "headphones",
+  "horns",
+] as const;
+
+/** An avatar built in the app from generated parts: no external asset. */
+export const creatorSchema = z.object({
+  skin: hexColor.catch("#f2c9a8").default("#f2c9a8"),
+  hair: z
+    .object({
+      style: z.enum(CREATOR_HAIR).catch("bob").default("bob"),
+      color: hexColor.catch("#3b2a4a").default("#3b2a4a"),
+    })
+    .default({ style: "bob", color: "#3b2a4a" }),
+  eyes: z
+    .object({
+      style: z.enum(CREATOR_EYES).catch("round").default("round"),
+      color: hexColor.catch("#3f7fd9").default("#3f7fd9"),
+      size: unit(0.7, 1.4, 1),
+    })
+    .default({ style: "round", color: "#3f7fd9", size: 1 }),
+  blush: z.boolean().catch(true).default(true),
+  outfit: z
+    .object({
+      style: z.enum(CREATOR_OUTFITS).catch("hoodie").default("hoodie"),
+      color: hexColor.catch("#e86a33").default("#e86a33"),
+      accent: hexColor.catch("#f4efe6").default("#f4efe6"),
+    })
+    .default({ style: "hoodie", color: "#e86a33", accent: "#f4efe6" }),
+  accessories: z
+    .array(z.enum(CREATOR_ACCESSORIES))
+    .max(CREATOR_ACCESSORIES.length)
+    .catch([])
+    .default([]),
+  accessoryColor: hexColor.catch("#2b2b33").default("#2b2b33"),
+  headScale: unit(0.85, 1.25, 1),
+  mouth: unit(0, 2, 1),
+  eyesAmount: unit(0, 2, 1),
+});
+
 export const voiceChangerSchema = z.object({
   enabled: z.boolean().catch(false).default(false),
   preset: z.string().max(40).catch("natural").default("natural"),
@@ -202,6 +254,11 @@ export const profileSchema = z.discriminatedUnion("kind", [
     kind: z.literal("live2d"),
     live2d: live2dSchema,
   }),
+  z.object({
+    ...base,
+    kind: z.literal("creator"),
+    creator: creatorSchema,
+  }),
 ]);
 
 export type Motion = z.infer<typeof motionSchema>;
@@ -218,6 +275,8 @@ export type Scene = z.infer<typeof sceneSchema>;
 export type VrmProfile = Extract<Profile, { kind: "vrm" }>;
 export type Live2dConfig = z.infer<typeof live2dSchema>;
 export type Live2dProfile = Extract<Profile, { kind: "live2d" }>;
+export type CreatorConfig = z.infer<typeof creatorSchema>;
+export type CreatorProfile = Extract<Profile, { kind: "creator" }>;
 export type ProfileKind = Profile["kind"];
 export type VoiceConfig = z.infer<typeof voiceSchema>;
 export type VoiceChanger = z.infer<typeof voiceChangerSchema>;
@@ -256,6 +315,8 @@ export function newProfile(name: string, kind: ProfileKind): Profile {
       return { ...common, kind, vrm: vrmSchema.parse({}) };
     case "live2d":
       return { ...common, kind, live2d: live2dSchema.parse({}) };
+    case "creator":
+      return { ...common, kind, creator: creatorSchema.parse({}) };
   }
 }
 
@@ -268,14 +329,21 @@ export function referencedMedia(profile: Profile): string[] {
         ? [profile.puppet.image]
         : profile.kind === "vrm"
           ? [profile.vrm.model]
-          : [profile.live2d.model];
+          : profile.kind === "live2d"
+            ? [profile.live2d.model]
+            : [];
   files.push(profile.scene.background.image);
   return [...new Set(files.filter((f): f is string => f !== null))];
 }
 
 export function coverImage(profile: Profile): string | null {
   if (profile.kind === "puppet") return profile.puppet.image;
-  if (profile.kind === "vrm" || profile.kind === "live2d") return null;
+  if (
+    profile.kind === "vrm" ||
+    profile.kind === "live2d" ||
+    profile.kind === "creator"
+  )
+    return null;
   for (const e of profile.expressions) if (e.idle) return e.idle;
   return null;
 }

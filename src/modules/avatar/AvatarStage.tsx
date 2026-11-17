@@ -9,6 +9,7 @@ import type { RigFrame } from "@/modules/rig/rig";
 // three.js only loads when a 3D profile is shown: 2D profiles pay nothing for it.
 const VrmView = lazy(() => import("@/modules/avatar/vrm/VrmView"));
 const Live2DView = lazy(() => import("@/modules/avatar/live2d/Live2DView"));
+const CreatorView = lazy(() => import("@/modules/avatar/creator/CreatorView"));
 
 type Props = {
   profile: Profile;
@@ -69,6 +70,12 @@ function AvatarView({ profile, mediaBase, getFrame, onError }: Props) {
             getFrame={getFrame}
             onError={onError}
           />
+        </Suspense>
+      );
+    case "creator":
+      return (
+        <Suspense fallback={null}>
+          <CreatorView key={profile.id} profile={profile} getFrame={getFrame} />
         </Suspense>
       );
     case "live2d":

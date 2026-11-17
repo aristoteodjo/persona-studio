@@ -1,4 +1,11 @@
-import { Box, ImageIcon, Plus, ScanFace, Sparkles } from "lucide-react";
+import {
+  Box,
+  ImageIcon,
+  Palette,
+  Plus,
+  ScanFace,
+  Sparkles,
+} from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -29,6 +36,7 @@ export const KIND_LABEL: Record<ProfileKind, string> = {
   puppet: "2.5D",
   vrm: "3D",
   live2d: "Live2D",
+  creator: "Créé",
 };
 
 const KINDS: {
@@ -60,6 +68,12 @@ const KINDS: {
     title: "Live2D · Modèle Cubism",
     text: "Un modèle Live2D (.model3.json, Cubism 3 et plus). Tête, corps, yeux, bouche et physique des cheveux.",
     icon: Sparkles,
+  },
+  {
+    kind: "creator",
+    title: "Créateur · Sans fichier",
+    text: "Compose un avatar 3D dans l'app : visage, yeux, coiffure, tenue, accessoires. Aucun fichier à importer.",
+    icon: Palette,
   },
 ];
 
