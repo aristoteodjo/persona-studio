@@ -85,9 +85,15 @@ type Props = {
   profile: Profile;
   dropHover: string | null;
   onDeleted: () => void;
+  onOpenAtelier: (id: string) => void;
 };
 
-export function ProfileEditor({ profile, dropHover, onDeleted }: Props) {
+export function ProfileEditor({
+  profile,
+  dropHover,
+  onDeleted,
+  onOpenAtelier,
+}: Props) {
   const update = useProfiles((s) => s.update);
   const remove = useProfiles((s) => s.remove);
   const [confirm, setConfirm] = useState(false);
@@ -152,7 +158,10 @@ export function ProfileEditor({ profile, dropHover, onDeleted }: Props) {
             ) : profile.kind === "live2d" ? (
               <Live2dEditor profile={profile} dropHover={dropHover} />
             ) : (
-              <CreatorEditor profile={profile} />
+              <CreatorEditor
+                profile={profile}
+                onOpenAtelier={() => onOpenAtelier(profile.id)}
+              />
             )}
           </TabsContent>
           <TabsContent value="motion" className="p-4">

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { pushProfile, useOverlayInfo } from "@/modules/overlay-link";
 import { useProfiles } from "@/modules/profiles/store";
 import { useSettings } from "@/modules/settings/store";
@@ -10,7 +11,8 @@ import { ProfileEditor } from "@/modules/studio/components/ProfileEditor";
 import { ProfileList } from "@/modules/studio/components/ProfileList";
 import { SettingsModal } from "@/modules/studio/components/SettingsModal";
 import { Stage } from "@/modules/studio/components/Stage";
-import { TopBar } from "@/modules/studio/components/TopBar";
+import { AtelierView } from "@/modules/atelier/AtelierView";
+import { type Section, TopBar } from "@/modules/studio/components/TopBar";
 import { useExpressionHotkeys } from "@/modules/studio/lib/useExpressionHotkeys";
 import { useFileDrop } from "@/modules/studio/lib/files";
 import { voiceSchema } from "@/modules/profiles/schema";
@@ -28,6 +30,8 @@ export function App() {
   const overlay = useOverlayInfo();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [section, setSection] = useState<Section>("studio");
+  const [atelierId, setAtelierId] = useState<string | null>(null);
   const dropHover = useFileDrop();
 
   useEffect(() => {
@@ -105,6 +109,8 @@ export function App() {
         Aller à l'aperçu
       </a>
       <TopBar
+        section={section}
+        onSection={setSection}
         onSettings={() => setSettingsOpen(true)}
         onAbout={() => setAboutOpen(true)}
       />
@@ -118,7 +124,21 @@ export function App() {
             : `Enregistrement impossible : ${saveError}`}
         </p>
       ) : null}
-      <main id="stage" className="flex min-h-0 flex-1">
+      {section === "atelier" ? (
+        <AtelierView
+          key={atelierId ?? "atelier"}
+          profiles={profiles}
+          initialId={atelierId}
+          onUse={(id) => {
+            select(id);
+            setSection("studio");
+          }}
+        />
+      ) : null}
+      <main
+        id="stage"
+        className={cn("flex min-h-0 flex-1", section !== "studio" && "hidden")}
+      >
         <ProfileList
           profiles={profiles}
           activeId={active?.id ?? null}
@@ -131,6 +151,10 @@ export function App() {
             profile={active}
             dropHover={dropHover}
             onDeleted={() => setSettings({ activeProfileId: null })}
+            onOpenAtelier={(id) => {
+              setAtelierId(id);
+              setSection("atelier");
+            }}
           />
         ) : null}
       </main>
